@@ -3,8 +3,8 @@ import cors from 'cors';
 import { TwinklyClient } from '@twinklyjs/twinkly';
 
 const app = express();
-const PORT = 3000;
-const TWINKLY_IP = '10.10.20.15'; // Hardcoded Twinkly device IP
+const PORT = process.env.PORT || 3000;
+const TWINKLY_IP = process.env.TWINKLY_IP || 'fallback';
 
 // Middleware
 app.use(cors());
