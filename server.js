@@ -52,9 +52,9 @@ async function processNextInQueue() {
     if (currentUser.type === 'color') {
       // Convert hex to RGB
       const hex = currentUser.color.replace('#', '');
-      const r = parseInt(hex.substr(0, 2), 16);
-      const g = parseInt(hex.substr(2, 2), 16);
-      const b = parseInt(hex.substr(4, 2), 16);
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
       
       await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
       await client.setLEDOperationMode({ mode: 'color' });
