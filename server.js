@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { TwinklyClient } from '@twinklyjs/twinkly';
+import { TwinklyClient, discover } from '@twinklyjs/twinkly';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -196,7 +196,6 @@ app.get('/api/brightness', async (req, res) => {
 // Discover devices on the network
 app.get('/api/discover', async (req, res) => {
   try {
-    const { discover } = await import('@twinklyjs/twinkly');
     const devices = await discover({ timeout: 5000 });
     res.json({ devices });
   } catch (error) {
