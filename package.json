@@ -6,14 +6,22 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "vitest run"
   },
-  "keywords": ["twinkly", "smart-lights", "iot"],
+  "keywords": [
+    "twinkly",
+    "smart-lights",
+    "iot"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@twinklyjs/twinkly": "^0.0.6",
     "cors": "^2.8.5",
     "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
   }
 }
