@@ -264,7 +264,7 @@ app.post('/api/current-movie', async (req, res) => {
 app.post('/api/queue/join', async (req, res) => {
   try {
     const { nickname, type, color, movieId } = req.body;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = req.ip;
     
     if (!nickname || !type) {
       return res.status(400).json({ error: 'Le surnom et le type sont requis' });
