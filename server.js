@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { TwinklyClient } from '@twinklyjs/twinkly';
+import { getClient } from './client.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,21 +17,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Store client instances by IP
-const clients = new Map();
 
 // Queue system
 let queue = [];
 let currentUser = null;
 let currentTimeout = null;
 
-// Get or create a Twinkly client for a given IP
-function getClient(ip) {
-  if (!clients.has(ip)) {
-    clients.set(ip, new TwinklyClient({ ip }));
-  }
-  return clients.get(ip);
-}
 
 // Process next person in queue
 async function processNextInQueue() {
