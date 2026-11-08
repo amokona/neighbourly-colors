@@ -20,6 +20,7 @@ app.use((req, res, next) => {
 
 // Queue system
 let queue = [];
+let publicQueue = [];
 let currentUser = null;
 let currentTimeout = null;
 
@@ -32,6 +33,7 @@ async function processNextInQueue() {
   }
   
   currentUser = queue.shift();
+  publicQueue.shift();
   currentUser.startTime = Date.now();
   currentUser.duration = 120000; // 2 minutes in milliseconds
   
@@ -290,6 +292,12 @@ app.post('/api/queue/join', async (req, res) => {
     };
     
     queue.push(queueItem);
+    publicQueue.push({
+      nickname: queueItem.nickname,
+      type: queueItem.type,
+      color: queueItem.color,
+      movieId: queueItem.movieId
+    });
     
     // If no one is currently playing, start immediately
     if (!currentUser) {
@@ -326,12 +334,7 @@ app.get('/api/queue/status', (req, res) => {
     
     res.json({
       current,
-      queue: queue.map(item => ({
-        nickname: item.nickname,
-        type: item.type,
-        color: item.color,
-        movieId: item.movieId
-      }))
+      queue: publicQueue
     });
   } catch (error) {
     console.error('Error getting queue status:', error);
