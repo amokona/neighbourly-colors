@@ -95,15 +95,85 @@ CUSTOM_EFFECTS.forEach(eff => {
   knownMovies[eff.id] = eff.name;
 });
 
-function getDeviceMoviePreview(name = '') {
-  const n = name.toLowerCase();
-  if (n.includes('rainbow')) return 'linear-gradient(135deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)';
-  if (n.includes('candy')) return 'repeating-linear-gradient(45deg, #ef4444 0px, #ef4444 10px, #ffffff 10px, #ffffff 20px)';
-  if (n.includes('sunset')) return 'linear-gradient(135deg, #7c2d12, #ea580c, #facc15)';
-  if (n.includes('snow')) return 'linear-gradient(135deg, #0284c7, #bae6fd, #ffffff)';
-  if (n.includes('vintage')) return 'linear-gradient(135deg, #78350f, #d97706, #fef3c7)';
-  if (n.includes('twinkle')) return 'linear-gradient(135deg, #1e3a8a, #fbbf24, #ffffff)';
-  return 'linear-gradient(135deg, #4f46e5, #06b6d4)';
+function getDeviceMovieMeta(rawName = '', id = 0) {
+  const n = rawName.trim().toLowerCase();
+
+  if (n.includes('snowfall')) {
+    return {
+      name: 'Chute de Neige Étincelante',
+      description: 'Flocons scintillants tombant doucement sur le sapin',
+      preview: 'linear-gradient(135deg, #0369a1, #7dd3fc, #ffffff)'
+    };
+  }
+  if (n.includes('rotor')) {
+    return {
+      name: 'Hélice Lumineuse',
+      description: 'Colonnes de couleurs tournant autour du sapin',
+      preview: 'linear-gradient(135deg, #ec4899, #6366f1, #06b6d4)'
+    };
+  }
+  if (n === 'snow' || n.includes('snow')) {
+    return {
+      name: 'Neige d\'Hiver',
+      description: 'Tombée de neige blanche et bleue apaisante',
+      preview: 'linear-gradient(135deg, #0284c7, #bae6fd, #ffffff)'
+    };
+  }
+  if (n.includes('rainbow')) {
+    return {
+      name: 'Arc-en-Ciel',
+      description: 'Dégradé fluide de toutes les couleurs de l\'arc-en-ciel',
+      preview: 'linear-gradient(135deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)'
+    };
+  }
+  if (n.includes('twinkle')) {
+    return {
+      name: 'Scintillement Vif',
+      description: 'Étoiles lumineuses clignotant avec éclat sur tout le sapin',
+      preview: 'linear-gradient(135deg, #1e3a8a, #fbbf24, #ffffff)'
+    };
+  }
+  if (n.includes('candy')) {
+    return {
+      name: 'Sucre d\'Orge',
+      description: 'Rayures festives rouges et blanches',
+      preview: 'repeating-linear-gradient(45deg, #ef4444 0px, #ef4444 10px, #ffffff 10px, #ffffff 20px)'
+    };
+  }
+  if (n.includes('sunset')) {
+    return {
+      name: 'Coucher de Soleil',
+      description: 'Dégradé chaleureux d\'orange, rose et pourpre',
+      preview: 'linear-gradient(135deg, #7c2d12, #ea580c, #facc15)'
+    };
+  }
+  if (n.includes('diagonal')) {
+    return {
+      name: 'Vagues Diagonales',
+      description: 'Bandes colorées glissant en diagonale sur le sapin',
+      preview: 'linear-gradient(135deg, #10b981, #3b82f6, #8b5cf6)'
+    };
+  }
+  if (n.includes('vintage')) {
+    return {
+      name: 'Noël Vintage',
+      description: 'Lumières rétro aux tons chauds et dorés',
+      preview: 'linear-gradient(135deg, #78350f, #d97706, #fef3c7)'
+    };
+  }
+  if (n.includes('slow wave') || n.includes('wave')) {
+    return {
+      name: 'Vague Douce',
+      description: 'Ondulation lente et relaxante de couleurs',
+      preview: 'linear-gradient(135deg, #312e81, #4f46e5, #38bdf8)'
+    };
+  }
+
+  return {
+    name: rawName || `Effet #${id}`,
+    description: 'Animation lumineuse sur tout le sapin',
+    preview: 'linear-gradient(135deg, #4f46e5, #06b6d4)'
+  };
 }
 
 function loadUsageData() {
@@ -549,12 +619,14 @@ app.get('/api/movies', async (req, res) => {
       const moviesData = await client.getMovies();
       if (moviesData && Array.isArray(moviesData.movies)) {
         deviceMovies = moviesData.movies.map(m => {
-          knownMovies[m.id] = m.name || `Effet #${m.id}`;
+          const meta = getDeviceMovieMeta(m.name, m.id);
+          knownMovies[m.id] = meta.name;
           return {
             ...m,
+            name: meta.name,
             source: 'device',
-            description: 'Effet enregistré sur le contrôleur Twinkly',
-            preview: getDeviceMoviePreview(m.name)
+            description: meta.description,
+            preview: meta.preview
           };
         });
       }
