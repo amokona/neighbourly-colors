@@ -393,8 +393,7 @@
     </div>
 
     <script>
-        const API_BASE = 'https://home.nassab.ca/api';
-        const TWINKLY_IP = '10.10.20.15';
+        const API_BASE = '/api';
         let currentMovies = [];
         let selectedMovieId = null;
         let controlType = 'color'; // 'color' or 'effect'
@@ -471,14 +470,19 @@
                 const card = document.createElement('div');
                 card.className = 'movie-card';
                 if (movie.id === selectedMovieId) {
-                    card.className += ' selected';
+                    card.classList.add('selected');
                 }
                 
-                card.innerHTML = `
-                    <div class="movie-name">${movie.name || `Effect ${index + 1}`}</div>
-                    <div class="movie-id">ID: ${movie.id}</div>
-                `;
+                const nameEl = document.createElement('div');
+                nameEl.className = 'movie-name';
+                nameEl.textContent = movie.name || `Effect ${index + 1}`;
                 
+                const idEl = document.createElement('div');
+                idEl.className = 'movie-id';
+                idEl.textContent = `ID: ${movie.id}`;
+                
+                card.appendChild(nameEl);
+                card.appendChild(idEl);
                 card.onclick = () => selectMovie(movie.id);
                 grid.appendChild(card);
             });
@@ -540,6 +544,7 @@
                 
                 // Update current display
                 const currentDisplay = document.getElementById('currentDisplay');
+                currentDisplay.innerHTML = '';
                 if (data.current) {
                     const timeLeft = Math.max(0, Math.ceil(data.current.timeRemaining / 1000));
                     const minutes = Math.floor(timeLeft / 60);
@@ -553,47 +558,78 @@
                         choiceText = `Effet: ${movie ? movie.name : 'Effet ' + data.current.movieId}`;
                     }
                     
-                    currentDisplay.innerHTML = `
-                        <h4>${data.current.nickname}</h4>
-                        <div class="time-remaining">${minutes}:${seconds.toString().padStart(2, '0')}</div>
-                        <div class="user-info">${choiceText}</div>
-                    `;
+                    const titleEl = document.createElement('h4');
+                    titleEl.textContent = data.current.nickname;
+                    
+                    const timeEl = document.createElement('div');
+                    timeEl.className = 'time-remaining';
+                    timeEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                    
+                    const infoEl = document.createElement('div');
+                    infoEl.className = 'user-info';
+                    infoEl.textContent = choiceText;
+                    
+                    currentDisplay.appendChild(titleEl);
+                    currentDisplay.appendChild(timeEl);
+                    currentDisplay.appendChild(infoEl);
                 } else {
-                    currentDisplay.innerHTML = '<div class="user-info">En attente du premier utilisateur...</div>';
+                    const emptyInfoEl = document.createElement('div');
+                    emptyInfoEl.className = 'user-info';
+                    emptyInfoEl.textContent = 'En attente du premier utilisateur...';
+                    currentDisplay.appendChild(emptyInfoEl);
                 }
                 
                 // Update queue list
                 const queueList = document.getElementById('queueList');
                 const queueCount = document.getElementById('queueCount');
                 queueCount.textContent = data.queue.length;
+                queueList.innerHTML = '';
                 
                 if (data.queue.length === 0) {
-                    queueList.innerHTML = '<li class="empty-queue">Personne dans la file</li>';
+                    const emptyItem = document.createElement('li');
+                    emptyItem.className = 'empty-queue';
+                    emptyItem.textContent = 'Personne dans la file';
+                    queueList.appendChild(emptyItem);
                 } else {
-                    queueList.innerHTML = data.queue.map((item, index) => {
-                        let choiceText = '';
-                        let colorPreview = '';
+                    data.queue.forEach((item, index) => {
+                        const li = document.createElement('li');
+                        li.className = 'queue-item';
+                        
+                        const posEl = document.createElement('div');
+                        posEl.className = 'position';
+                        posEl.textContent = String(index + 1);
+                        
+                        const infoEl = document.createElement('div');
+                        infoEl.className = 'info';
+                        
+                        const nickEl = document.createElement('div');
+                        nickEl.className = 'nickname';
+                        nickEl.textContent = item.nickname;
+                        
+                        const choiceEl = document.createElement('div');
+                        choiceEl.className = 'choice';
+                        
+                        const previewEl = document.createElement('div');
+                        previewEl.className = 'color-preview';
                         
                         if (item.type === 'color') {
-                            choiceText = `Couleur Unie`;
-                            colorPreview = `<div class="color-preview" style="background-color: ${item.color}"></div>`;
+                            choiceEl.textContent = 'Couleur Unie';
+                            if (/^#[0-9a-fA-F]{6}$/.test(item.color)) {
+                                previewEl.style.backgroundColor = item.color;
+                            }
                         } else {
                             const movie = currentMovies.find(m => m.id === item.movieId);
-                            choiceText = movie ? movie.name : `Effet ${item.movieId}`;
-                            colorPreview = '<div class="color-preview" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)"></div>';
+                            choiceEl.textContent = movie ? movie.name : `Effet ${item.movieId}`;
+                            previewEl.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
                         }
                         
-                        return `
-                            <li class="queue-item">
-                                <div class="position">${index + 1}</div>
-                                <div class="info">
-                                    <div class="nickname">${item.nickname}</div>
-                                    <div class="choice">${choiceText}</div>
-                                </div>
-                                ${colorPreview}
-                            </li>
-                        `;
-                    }).join('');
+                        infoEl.appendChild(nickEl);
+                        infoEl.appendChild(choiceEl);
+                        li.appendChild(posEl);
+                        li.appendChild(infoEl);
+                        li.appendChild(previewEl);
+                        queueList.appendChild(li);
+                    });
                 }
             } catch (error) {
                 console.error('Erreur lors de la mise à jour de la file:', error);
