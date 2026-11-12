@@ -675,7 +675,8 @@
                 (data.movies || []).forEach(movie => {
                     const btn = document.createElement('button');
                     btn.className = 'movie-btn';
-                    btn.textContent = `${movie.name} (#${movie.id})`;
+                    const icon = movie.source === 'custom' ? '✨ ' : '🌲 ';
+                    btn.textContent = `${icon}${movie.name}`;
                     btn.onclick = () => applyDirectMovie(movie.id);
                     grid.appendChild(btn);
                 });
@@ -804,7 +805,7 @@
                     const li = document.createElement('li');
                     li.className = 'top-item';
                     const nameSpan = document.createElement('span');
-                    nameSpan.textContent = `${eff.name} (ID #${eff.movieId})`;
+                    nameSpan.textContent = eff.name;
                     const countSpan = document.createElement('strong');
                     countSpan.textContent = `${eff.count} fois`;
                     li.appendChild(nameSpan);

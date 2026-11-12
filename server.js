@@ -5,6 +5,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getClient } from './client.js';
+import {
+  CUSTOM_EFFECTS,
+  isCustomEffectId,
+  getCustomEffectById,
+  effectRunner
+} from './effects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +21,7 @@ const TWINKLY_IP = process.env.TWINKLY_IP || 'fallback';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN || '';
 const DEFAULT_MOVIE_ID = process.env.DEFAULT_MOVIE_ID !== undefined && process.env.DEFAULT_MOVIE_ID !== ''
-  ? Number(process.env.DEFAULT_MOVIE_ID)
+  ? (isCustomEffectId(process.env.DEFAULT_MOVIE_ID) ? process.env.DEFAULT_MOVIE_ID : Number(process.env.DEFAULT_MOVIE_ID))
   : null;
 
 const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
@@ -71,6 +77,20 @@ let usageData = {
 };
 
 let knownMovies = {};
+CUSTOM_EFFECTS.forEach(eff => {
+  knownMovies[eff.id] = eff.name;
+});
+
+function getDeviceMoviePreview(name = '') {
+  const n = name.toLowerCase();
+  if (n.includes('rainbow')) return 'linear-gradient(135deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)';
+  if (n.includes('candy')) return 'repeating-linear-gradient(45deg, #ef4444 0px, #ef4444 10px, #ffffff 10px, #ffffff 20px)';
+  if (n.includes('sunset')) return 'linear-gradient(135deg, #7c2d12, #ea580c, #facc15)';
+  if (n.includes('snow')) return 'linear-gradient(135deg, #0284c7, #bae6fd, #ffffff)';
+  if (n.includes('vintage')) return 'linear-gradient(135deg, #78350f, #d97706, #fef3c7)';
+  if (n.includes('twinkle')) return 'linear-gradient(135deg, #1e3a8a, #fbbf24, #ffffff)';
+  return 'linear-gradient(135deg, #4f46e5, #06b6d4)';
+}
 
 function loadUsageData() {
   try {
@@ -137,6 +157,18 @@ function recordQueueTurn({ nickname, type, color, movieId, ip }) {
 }
 
 loadUsageData();
+
+// Helper to apply either a custom 3D effect or an on-device movie
+async function applyEffectOrMovie(client, movieId) {
+  if (isCustomEffectId(movieId)) {
+    await effectRunner.start(client, TWINKLY_IP, movieId);
+  } else {
+    effectRunner.stop();
+    await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
+    await client.setCurrentMovie({ id: Number(movieId) });
+    await client.setLEDOperationMode({ mode: 'movie' });
+  }
+}
 
 // Trust first reverse proxy so req.ip reflects the real client IP safely
 app.set('trust proxy', 1);
@@ -252,16 +284,16 @@ async function processNextInQueue() {
   if (queue.length === 0) {
     currentUser = null;
 
-    if (DEFAULT_MOVIE_ID !== null && !Number.isNaN(DEFAULT_MOVIE_ID)) {
+    if (DEFAULT_MOVIE_ID !== null && DEFAULT_MOVIE_ID !== '') {
       try {
         const client = getClient(TWINKLY_IP);
-        await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-        await client.setCurrentMovie({ id: DEFAULT_MOVIE_ID });
-        await client.setLEDOperationMode({ mode: 'movie' });
-        console.log(`Queue empty: reverted to default movie ${DEFAULT_MOVIE_ID}`);
+        await applyEffectOrMovie(client, DEFAULT_MOVIE_ID);
+        console.log(`Queue empty: reverted to default movie/effect ${DEFAULT_MOVIE_ID}`);
       } catch (error) {
         console.error('Error reverting to default movie:', error);
       }
+    } else {
+      effectRunner.stop();
     }
     return;
   }
@@ -276,6 +308,7 @@ async function processNextInQueue() {
     const client = getClient(TWINKLY_IP);
 
     if (currentUser.type === 'color') {
+      effectRunner.stop();
       const hex = currentUser.color.slice(1);
       const r = parseInt(hex.slice(0, 2), 16);
       const g = parseInt(hex.slice(2, 4), 16);
@@ -285,9 +318,7 @@ async function processNextInQueue() {
       await client.setLEDOperationMode({ mode: 'color' });
       await client.setLEDColor({ r, g, b });
     } else {
-      await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-      await client.setCurrentMovie({ id: currentUser.movieId });
-      await client.setLEDOperationMode({ mode: 'movie' });
+      await applyEffectOrMovie(client, currentUser.movieId);
     }
 
     console.log(`Applied ${currentUser.type} for ${currentUser.nickname}`);
@@ -359,6 +390,10 @@ app.post('/api/mode', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Mode required' });
     }
 
+    if (mode !== 'rt') {
+      effectRunner.stop();
+    }
+
     const client = getClient(TWINKLY_IP);
     await client.setLEDOperationMode({ mode });
 
@@ -390,6 +425,7 @@ app.post('/api/color', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'RGB values required' });
     }
 
+    effectRunner.stop();
     const client = getClient(TWINKLY_IP);
     await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
     await client.setLEDOperationMode({ mode: 'color' });
@@ -465,19 +501,31 @@ app.get('/api/discover', requireAdmin, async (req, res) => {
   }
 });
 
-// Get list of movies/patterns (public - needed by queue UI)
+// Get list of movies/patterns (public - returns both custom 3D effects and device movies)
 app.get('/api/movies', async (req, res) => {
   try {
-    const client = getClient(TWINKLY_IP);
-    const moviesData = await client.getMovies();
-    if (moviesData && Array.isArray(moviesData.movies)) {
-      moviesData.movies.forEach(m => {
-        if (m && m.id !== undefined) {
+    let deviceMovies = [];
+    try {
+      const client = getClient(TWINKLY_IP);
+      const moviesData = await client.getMovies();
+      if (moviesData && Array.isArray(moviesData.movies)) {
+        deviceMovies = moviesData.movies.map(m => {
           knownMovies[m.id] = m.name || `Effet #${m.id}`;
-        }
-      });
+          return {
+            ...m,
+            source: 'device',
+            description: 'Effet enregistré sur le contrôleur Twinkly',
+            preview: getDeviceMoviePreview(m.name)
+          };
+        });
+      }
+    } catch (devErr) {
+      console.warn('Could not fetch device movies, returning custom effects only:', devErr.message);
     }
-    res.json(moviesData);
+
+    res.json({
+      movies: [...CUSTOM_EFFECTS, ...deviceMovies]
+    });
   } catch (error) {
     console.error('Error getting movies:', error);
     res.status(500).json({ error: error.message });
@@ -496,7 +544,7 @@ app.get('/api/current-movie', requireAdmin, async (req, res) => {
   }
 });
 
-// Set current movie (admin only)
+// Set current movie or custom effect (admin only)
 app.post('/api/current-movie', requireAdmin, async (req, res) => {
   try {
     const { movie_id } = req.body;
@@ -504,25 +552,23 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Movie ID required' });
     }
 
-    const parsedId = Number(movie_id);
     const client = getClient(TWINKLY_IP);
-    await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-    await client.setCurrentMovie({ id: parsedId });
-    await client.setLEDOperationMode({ mode: 'movie' });
+    const targetId = isCustomEffectId(movie_id) ? movie_id : Number(movie_id);
+    await applyEffectOrMovie(client, targetId);
 
-    const movieName = knownMovies[parsedId] || `Effet #${parsedId}`;
+    const movieName = knownMovies[targetId] || `Effet #${targetId}`;
     addLogEntry({
       event: 'admin_action',
       nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       type: 'effect',
-      movieId: parsedId,
+      movieId: targetId,
       movieName,
       status: 'success',
       details: `Effet direct appliqué: ${movieName}`
     });
 
-    res.json({ success: true, movie_id: parsedId });
+    res.json({ success: true, movie_id: targetId });
   } catch (error) {
     console.error('Error setting current movie:', error);
     res.status(500).json({ error: error.message });
@@ -546,7 +592,7 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
 
     const topEffects = Object.entries(usageData.movieCounts || {})
       .map(([id, count]) => ({
-        movieId: Number(id),
+        movieId: id,
         name: knownMovies[id] || `Effet #${id}`,
         count
       }))
@@ -711,10 +757,16 @@ app.post('/api/queue/join', async (req, res) => {
       }
     }
 
-    const parsedMovieId = type === 'effect' ? Number(movieId) : null;
+    let validatedMovieId = null;
     if (type === 'effect') {
-      if (movieId === undefined || movieId === null || !Number.isInteger(parsedMovieId) || parsedMovieId < 0) {
-        return res.status(400).json({ error: 'L\'ID de l\'effet est requis et doit être un entier valide' });
+      if (isCustomEffectId(movieId)) {
+        validatedMovieId = movieId;
+      } else {
+        const parsedMovieId = Number(movieId);
+        if (movieId === undefined || movieId === null || !Number.isInteger(parsedMovieId) || parsedMovieId < 0) {
+          return res.status(400).json({ error: 'Veuillez sélectionner un effet valide' });
+        }
+        validatedMovieId = parsedMovieId;
       }
     }
 
@@ -734,7 +786,7 @@ app.post('/api/queue/join', async (req, res) => {
       nickname: cleanNickname,
       type,
       color: normalizedColor,
-      movieId: type === 'effect' ? parsedMovieId : null,
+      movieId: validatedMovieId,
       ip,
       joinedAt: Date.now()
     };
@@ -783,6 +835,7 @@ app.get('/api/queue/status', (req, res) => {
         type: currentUser.type,
         color: currentUser.color,
         movieId: currentUser.movieId,
+        movieName: currentUser.movieId !== null ? (knownMovies[currentUser.movieId] || null) : null,
         timeRemaining: remaining
       };
     }
@@ -794,7 +847,8 @@ app.get('/api/queue/status', (req, res) => {
         nickname: item.nickname,
         type: item.type,
         color: item.color,
-        movieId: item.movieId
+        movieId: item.movieId,
+        movieName: item.movieId !== null ? (knownMovies[item.movieId] || null) : null
       }))
     });
   } catch (error) {
