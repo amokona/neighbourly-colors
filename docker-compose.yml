@@ -1,6 +1,6 @@
 services:
   twinkly-web-controller:
-    build: .
+    build: https://github.com/amokona/neighbourly-colors.git#main
     ports:
       - "3000:3000"
     restart: unless-stopped
