@@ -78,6 +78,20 @@ function isValidSessionToken(token) {
   return true;
 }
 
+const DEFAULT_IDLE_PLAYLIST = {
+  enabled: true,
+  intervalSeconds: 180,
+  effects: [
+    'custom:aurora',
+    'custom:candycane_spiral',
+    'custom:starlight_gold',
+    'custom:christmas_classic',
+    0,
+    3,
+    8
+  ]
+};
+
 // Persistent usage stats & logs
 let usageData = {
   startedAt: new Date().toISOString(),
@@ -87,10 +101,22 @@ let usageData = {
   colorCounts: {},
   movieCounts: {},
   uniqueIps: [],
-  logs: []
+  logs: [],
+  idlePlaylist: { ...DEFAULT_IDLE_PLAYLIST }
 };
 
-let knownMovies = {};
+let knownMovies = {
+  0: 'Chute de Neige Étincelante',
+  1: 'Hélice Lumineuse',
+  2: 'Neige d\'Hiver',
+  3: 'Arc-en-Ciel',
+  4: 'Scintillement Vif',
+  5: 'Sucre d\'Orge',
+  6: 'Coucher de Soleil',
+  7: 'Vagues Diagonales',
+  8: 'Noël Vintage',
+  9: 'Vague Douce'
+};
 CUSTOM_EFFECTS.forEach(eff => {
   knownMovies[eff.id] = eff.name;
 });
@@ -184,13 +210,23 @@ function loadUsageData() {
     if (fs.existsSync(USAGE_FILE)) {
       const raw = fs.readFileSync(USAGE_FILE, 'utf8');
       const parsed = JSON.parse(raw);
+      const savedPlaylist = parsed.idlePlaylist || {};
       usageData = {
         ...usageData,
         ...parsed,
         colorCounts: parsed.colorCounts || {},
         movieCounts: parsed.movieCounts || {},
         uniqueIps: Array.isArray(parsed.uniqueIps) ? parsed.uniqueIps : [],
-        logs: Array.isArray(parsed.logs) ? parsed.logs : []
+        logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+        idlePlaylist: {
+          enabled: typeof savedPlaylist.enabled === 'boolean' ? savedPlaylist.enabled : DEFAULT_IDLE_PLAYLIST.enabled,
+          intervalSeconds: Number.isFinite(Number(savedPlaylist.intervalSeconds))
+            ? Math.max(15, Math.min(3600, Number(savedPlaylist.intervalSeconds)))
+            : DEFAULT_IDLE_PLAYLIST.intervalSeconds,
+          effects: Array.isArray(savedPlaylist.effects)
+            ? savedPlaylist.effects
+            : [...DEFAULT_IDLE_PLAYLIST.effects]
+        }
       };
     }
   } catch (error) {
@@ -377,11 +413,68 @@ app.post('/api/admin/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Queue system
+// Queue system & Idle Playlist rotation
 let queue = [];
 let currentUser = null;
 let currentTimeout = null;
 let queuePaused = false;
+let idleTimer = null;
+let idlePlaylistIndex = 0;
+let currentIdleEffectId = null;
+
+function stopIdlePlaylist() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+  currentIdleEffectId = null;
+}
+
+async function runIdlePlaylistStep() {
+  if (currentUser || queue.length > 0) {
+    stopIdlePlaylist();
+    return;
+  }
+
+  const playlist = usageData.idlePlaylist || DEFAULT_IDLE_PLAYLIST;
+  if (!playlist.enabled || !Array.isArray(playlist.effects) || playlist.effects.length === 0) {
+    stopIdlePlaylist();
+    if (DEFAULT_MOVIE_ID !== null && DEFAULT_MOVIE_ID !== '') {
+      try {
+        currentIdleEffectId = DEFAULT_MOVIE_ID;
+        await applyEffectOrMovie(DEFAULT_MOVIE_ID);
+      } catch (error) {
+        console.error('Error reverting to default movie:', error);
+      }
+    } else {
+      effectRunner.stop();
+    }
+    return;
+  }
+
+  const effectId = playlist.effects[idlePlaylistIndex % playlist.effects.length];
+  idlePlaylistIndex = (idlePlaylistIndex + 1) % playlist.effects.length;
+  currentIdleEffectId = effectId;
+
+  try {
+    await applyEffectOrMovie(effectId);
+    console.log(`Idle playlist playing: ${knownMovies[effectId] || effectId}`);
+  } catch (error) {
+    console.error('Error applying idle playlist effect:', error.message);
+  }
+
+  if (!currentUser && queue.length === 0 && playlist.enabled && playlist.effects.length > 0) {
+    const delayMs = Math.max(15, Number(playlist.intervalSeconds) || 180) * 1000;
+    idleTimer = setTimeout(() => {
+      runIdlePlaylistStep();
+    }, delayMs);
+  }
+}
+
+async function startIdlePlaylist() {
+  stopIdlePlaylist();
+  await runIdlePlaylistStep();
+}
 
 // Process next person in queue
 async function processNextInQueue() {
@@ -392,20 +485,11 @@ async function processNextInQueue() {
 
   if (queue.length === 0) {
     currentUser = null;
-
-    if (DEFAULT_MOVIE_ID !== null && DEFAULT_MOVIE_ID !== '') {
-      try {
-        await applyEffectOrMovie(DEFAULT_MOVIE_ID);
-        console.log(`Queue empty: reverted to default movie/effect ${DEFAULT_MOVIE_ID}`);
-      } catch (error) {
-        console.error('Error reverting to default movie:', error);
-      }
-    } else {
-      effectRunner.stop();
-    }
+    await startIdlePlaylist();
     return;
   }
 
+  stopIdlePlaylist();
   currentUser = queue.shift();
   currentUser.startTime = Date.now();
   currentUser.duration = 120000; // 2 minutes in milliseconds
@@ -419,7 +503,8 @@ async function processNextInQueue() {
       const g = parseInt(hex.slice(2, 4), 16);
       const b = parseInt(hex.slice(4, 6), 16);
 
-      await applySolidColor({ r, g, b });
+      stopIdlePlaylist();
+    await applySolidColor({ r, g, b });
     } else {
       await applyEffectOrMovie(currentUser.movieId);
     }
@@ -503,6 +588,7 @@ app.post('/api/mode', requireAdmin, async (req, res) => {
     }
 
     if (mode !== 'rt') {
+      stopIdlePlaylist();
       effectRunner.stop();
     }
 
@@ -537,6 +623,7 @@ app.post('/api/color', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'RGB values required' });
     }
 
+    stopIdlePlaylist();
     await applySolidColor({ r, g, b });
 
     const hex = '#' + [r, g, b].map(v => Number(v).toString(16).padStart(2, '0')).join('');
@@ -663,6 +750,7 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Movie ID required' });
     }
 
+    stopIdlePlaylist();
     const targetId = isCustomEffectId(movie_id) ? movie_id : Number(movie_id);
     await applyEffectOrMovie(targetId);
 
@@ -720,6 +808,8 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
       };
     }
 
+    const playlist = usageData.idlePlaylist || DEFAULT_IDLE_PLAYLIST;
+
     res.json({
       summary: {
         startedAt: usageData.startedAt,
@@ -731,6 +821,14 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
       },
       topColors,
       topEffects,
+      idlePlaylist: {
+        enabled: Boolean(playlist.enabled),
+        intervalSeconds: Number(playlist.intervalSeconds) || 180,
+        effects: Array.isArray(playlist.effects) ? playlist.effects : [],
+        active: !currentUser && Boolean(playlist.enabled) && currentIdleEffectId !== null,
+        currentEffectId: currentIdleEffectId,
+        currentEffectName: currentIdleEffectId !== null ? (knownMovies[currentIdleEffectId] || `Effet #${currentIdleEffectId}`) : null
+      },
       queueState: {
         paused: queuePaused,
         current,
@@ -744,6 +842,98 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
     });
   } catch (error) {
     console.error('Error getting admin stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Configure Idle Playlist (admin only)
+app.post('/api/admin/playlist', requireAdmin, async (req, res) => {
+  try {
+    const { enabled, intervalSeconds, effects } = req.body || {};
+
+    const cleanEnabled = typeof enabled === 'boolean'
+      ? enabled
+      : Boolean(usageData.idlePlaylist?.enabled);
+
+    const parsedInterval = Number(intervalSeconds);
+    const cleanInterval = Number.isFinite(parsedInterval)
+      ? Math.max(15, Math.min(3600, Math.round(parsedInterval)))
+      : (usageData.idlePlaylist?.intervalSeconds || 180);
+
+    let cleanEffects = Array.isArray(usageData.idlePlaylist?.effects)
+      ? [...usageData.idlePlaylist.effects]
+      : [...DEFAULT_IDLE_PLAYLIST.effects];
+
+    if (Array.isArray(effects)) {
+      cleanEffects = [];
+      const seen = new Set();
+      for (const rawId of effects) {
+        if (isCustomEffectId(rawId)) {
+          if (!seen.has(rawId)) {
+            seen.add(rawId);
+            cleanEffects.push(rawId);
+          }
+        } else {
+          const numId = Number(rawId);
+          if (Number.isInteger(numId) && numId >= 0 && !seen.has(numId)) {
+            seen.add(numId);
+            cleanEffects.push(numId);
+          }
+        }
+      }
+    }
+
+    usageData.idlePlaylist = {
+      enabled: cleanEnabled,
+      intervalSeconds: cleanInterval,
+      effects: cleanEffects
+    };
+    saveUsageData();
+
+    addLogEntry({
+      event: 'admin_action',
+      nickname: ADMIN_USER,
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: `Playlist veille mise à jour (${cleanEnabled ? 'Activée' : 'Désactivée'}, ${cleanEffects.length} effet(s), cycle ${cleanInterval}s)`
+    });
+
+    if (!currentUser && queue.length === 0) {
+      idlePlaylistIndex = 0;
+      await startIdlePlaylist();
+    }
+
+    res.json({
+      success: true,
+      idlePlaylist: usageData.idlePlaylist
+    });
+  } catch (error) {
+    console.error('Error saving idle playlist:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Advance to next effect in Idle Playlist immediately (admin only)
+app.post('/api/admin/playlist/next', requireAdmin, async (req, res) => {
+  try {
+    if (currentUser) {
+      return res.status(400).json({ error: 'Un utilisateur contrôle actuellement le sapin.' });
+    }
+    await startIdlePlaylist();
+    const effectName = currentIdleEffectId !== null ? (knownMovies[currentIdleEffectId] || `Effet #${currentIdleEffectId}`) : 'Aucun';
+    addLogEntry({
+      event: 'admin_action',
+      nickname: ADMIN_USER,
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: `Playlist veille : passage à "${effectName}"`
+    });
+    res.json({
+      success: true,
+      currentEffectId: currentIdleEffectId,
+      currentEffectName: effectName
+    });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -953,6 +1143,12 @@ app.get('/api/queue/status', (req, res) => {
     res.json({
       paused: queuePaused,
       current,
+      idleEffect: (!current && currentIdleEffectId !== null)
+        ? {
+            movieId: currentIdleEffectId,
+            movieName: knownMovies[currentIdleEffectId] || null
+          }
+        : null,
       queue: queue.map(item => ({
         nickname: item.nickname,
         type: item.type,
@@ -973,4 +1169,11 @@ app.listen(PORT, () => {
   console.log(`Contrôleurs Twinkly (${TWINKLY_IPS.length}): ${TWINKLY_IPS.join(', ')}`);
   console.log(`Tableau de bord Admin: http://localhost:${PORT}/admin`);
   console.log(`API disponible à http://localhost:${PORT}/api`);
+
+  // Start the idle playlist shortly after boot if the queue is empty
+  setTimeout(() => {
+    if (!currentUser && queue.length === 0) {
+      startIdlePlaylist().catch(err => console.error('Initial idle playlist error:', err.message));
+    }
+  }, 1500);
 });

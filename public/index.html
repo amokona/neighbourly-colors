@@ -949,7 +949,9 @@
                     liveBottomRow.classList.remove('hidden');
                 } else {
                     liveDot.className = 'pulse-dot idle';
-                    liveUserText.textContent = 'Sapin libre — Votre tour démarre immédiatement !';
+                    liveUserText.textContent = data.idleEffect && data.idleEffect.movieName
+                        ? `Sapin libre (En boucle : ${data.idleEffect.movieName}) — Votre tour démarre immédiatement !`
+                        : 'Sapin libre — Votre tour démarre immédiatement !';
                     liveTimerText.textContent = '';
                     liveBottomRow.classList.add('hidden');
                 }

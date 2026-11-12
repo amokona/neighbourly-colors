@@ -331,6 +331,64 @@
             background: #eef2ff;
         }
 
+        .playlist-chips-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .playlist-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 11px;
+            border-radius: 9px;
+            border: 2px solid #e2e8f0;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .playlist-chip:hover {
+            border-color: #94a3b8;
+        }
+
+        .playlist-chip.selected {
+            border-color: #4f46e5;
+            background: #eef2ff;
+            color: #1e1b4b;
+        }
+
+        .playlist-chip-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+        }
+
+        .playlist-chip-check {
+            margin-left: auto;
+            font-size: 12px;
+            color: #4f46e5;
+            font-weight: 800;
+        }
+
+        .select-input {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            background: white;
+            color: #1e293b;
+        }
+
         .top-list {
             list-style: none;
         }
@@ -546,6 +604,61 @@
             </div>
         </div>
 
+        <!-- Idle Playlist Configuration Panel -->
+        <div class="panel" style="margin-bottom: 24px;">
+            <h2>
+                <span>🔁 Playlist Automatique (Mode Veille)</span>
+                <span class="badge badge-info" id="playlistStatusBadge">Chargement...</span>
+            </h2>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
+                Lorsque personne ne contrôle le sapin, le serveur fait défiler automatiquement les effets cochés ci-dessous.
+            </p>
+
+            <div class="control-row">
+                <div class="inline-controls" style="justify-content: space-between;">
+                    <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
+                        <input type="checkbox" id="playlistEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markPlaylistDirty()">
+                        Activer la rotation automatique quand la file d'attente est vide
+                    </label>
+
+                    <div class="inline-controls">
+                        <label for="playlistIntervalSelect" style="margin:0; font-size:13px;">Changer d'effet toutes les :</label>
+                        <select id="playlistIntervalSelect" class="select-input" onchange="markPlaylistDirty()">
+                            <option value="30">30 secondes</option>
+                            <option value="60">1 minute</option>
+                            <option value="120">2 minutes</option>
+                            <option value="180">3 minutes</option>
+                            <option value="300">5 minutes</option>
+                            <option value="600">10 minutes</option>
+                            <option value="900">15 minutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <div class="inline-controls" style="justify-content: space-between; margin-bottom: 6px;">
+                    <label style="margin:0;">Effets inclus dans la rotation (<span id="playlistSelectedCount">0</span> sélectionnés)</label>
+                    <div class="inline-controls" style="gap: 6px;">
+                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="selectPlaylistGroup('all')">Tout cocher</button>
+                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="selectPlaylistGroup('custom')">Effets 3D</button>
+                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="selectPlaylistGroup('device')">Classiques</button>
+                        <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="selectPlaylistGroup('none')">Tout décocher</button>
+                    </div>
+                </div>
+                <div class="playlist-chips-grid" id="playlistEffectsGrid"></div>
+            </div>
+
+            <div class="inline-controls" style="margin-top: 14px;">
+                <button type="button" class="btn btn-primary" id="savePlaylistBtn" onclick="savePlaylistConfig()">
+                    💾 Enregistrer la Playlist
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="triggerNextPlaylistEffect()">
+                    ⏭️ Passer à l'effet suivant maintenant
+                </button>
+            </div>
+        </div>
+
         <!-- Top Effects & Top Colors -->
         <div class="main-grid">
             <div class="panel">
@@ -593,6 +706,10 @@
         const API_BASE = '/api';
         let sessionToken = sessionStorage.getItem('twinkly_admin_session') || '';
         let statsInterval = null;
+        let allAdminMovies = [];
+        let playlistSelectedIds = new Set();
+        let playlistInitialized = false;
+        let playlistDirty = false;
 
         function getHeaders(includeJson = false) {
             const headers = {};
@@ -670,9 +787,10 @@
                 const res = await fetch(`${API_BASE}/movies`);
                 if (!res.ok) return;
                 const data = await res.json();
+                allAdminMovies = data.movies || [];
                 const grid = document.getElementById('adminMoviesGrid');
                 grid.innerHTML = '';
-                (data.movies || []).forEach(movie => {
+                allAdminMovies.forEach(movie => {
                     const btn = document.createElement('button');
                     btn.className = 'movie-btn';
                     const icon = movie.source === 'custom' ? '✨ ' : '🌲 ';
@@ -680,8 +798,121 @@
                     btn.onclick = () => applyDirectMovie(movie.id);
                     grid.appendChild(btn);
                 });
+                renderPlaylistChips();
             } catch (e) {
                 console.error(e);
+            }
+        }
+
+        function markPlaylistDirty() {
+            playlistDirty = true;
+            const btn = document.getElementById('savePlaylistBtn');
+            if (btn) btn.textContent = '💾 Enregistrer la Playlist *';
+        }
+
+        function renderPlaylistChips() {
+            const container = document.getElementById('playlistEffectsGrid');
+            if (!container) return;
+            container.innerHTML = '';
+
+            allAdminMovies.forEach(movie => {
+                const key = String(movie.id);
+                const isSelected = playlistSelectedIds.has(key);
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'playlist-chip' + (isSelected ? ' selected' : '');
+
+                const dot = document.createElement('span');
+                dot.className = 'playlist-chip-dot';
+                dot.style.backgroundImage = movie.preview || 'linear-gradient(135deg, #4f46e5, #06b6d4)';
+
+                const label = document.createElement('span');
+                label.style.overflow = 'hidden';
+                label.style.textOverflow = 'ellipsis';
+                label.style.whiteSpace = 'nowrap';
+                label.textContent = movie.name;
+
+                const check = document.createElement('span');
+                check.className = 'playlist-chip-check';
+                check.textContent = isSelected ? '✓' : '';
+
+                chip.appendChild(dot);
+                chip.appendChild(label);
+                chip.appendChild(check);
+
+                chip.onclick = () => {
+                    if (playlistSelectedIds.has(key)) {
+                        playlistSelectedIds.delete(key);
+                    } else {
+                        playlistSelectedIds.add(key);
+                    }
+                    markPlaylistDirty();
+                    renderPlaylistChips();
+                };
+
+                container.appendChild(chip);
+            });
+
+            document.getElementById('playlistSelectedCount').textContent = playlistSelectedIds.size;
+        }
+
+        function selectPlaylistGroup(group) {
+            if (group === 'none') {
+                playlistSelectedIds.clear();
+            } else if (group === 'all') {
+                allAdminMovies.forEach(m => playlistSelectedIds.add(String(m.id)));
+            } else if (group === 'custom') {
+                playlistSelectedIds.clear();
+                allAdminMovies.filter(m => m.source === 'custom').forEach(m => playlistSelectedIds.add(String(m.id)));
+            } else if (group === 'device') {
+                playlistSelectedIds.clear();
+                allAdminMovies.filter(m => m.source === 'device').forEach(m => playlistSelectedIds.add(String(m.id)));
+            }
+            markPlaylistDirty();
+            renderPlaylistChips();
+        }
+
+        async function savePlaylistConfig() {
+            const enabled = document.getElementById('playlistEnabledCheckbox').checked;
+            const intervalSeconds = Number(document.getElementById('playlistIntervalSelect').value) || 180;
+            const effects = Array.from(playlistSelectedIds).map(id => {
+                return id.startsWith('custom:') ? id : Number(id);
+            });
+
+            if (enabled && effects.length === 0) {
+                showAlert('Veuillez sélectionner au moins un effet pour activer la playlist.', 'error');
+                return;
+            }
+
+            const res = await fetch(`${API_BASE}/admin/playlist`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ enabled, intervalSeconds, effects })
+            });
+
+            if (res.ok) {
+                playlistDirty = false;
+                document.getElementById('savePlaylistBtn').textContent = '💾 Enregistrer la Playlist';
+                showAlert('Playlist de veille enregistrée et appliquée !', 'success');
+                loadAdminStats();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                showAlert(err.error || 'Erreur lors de la sauvegarde de la playlist');
+            }
+        }
+
+        async function triggerNextPlaylistEffect() {
+            const res = await fetch(`${API_BASE}/admin/playlist/next`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({})
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                showAlert(`Effet suivant lancé : ${data.currentEffectName || ''}`, 'success');
+                loadAdminStats();
+            } else {
+                showAlert(data.error || 'Impossible de passer à l\'effet suivant');
             }
         }
 
@@ -710,7 +941,7 @@
         }
 
         function renderStats(data) {
-            const { summary, topColors, topEffects, queueState, logs } = data;
+            const { summary, topColors, topEffects, idlePlaylist, queueState, logs } = data;
             document.getElementById('statTotalTurns').textContent = summary.totalTurns;
             document.getElementById('statLast24h').textContent = `${summary.turnsLast24h} durant les dernières 24h`;
             document.getElementById('statUniqueVisitors').textContent = summary.uniqueVisitors;
@@ -720,6 +951,36 @@
             const total = summary.totalTurns || 1;
             document.getElementById('statColorPct').textContent = `${Math.round((summary.colorTurns / total) * 100)}% des choix`;
             document.getElementById('statEffectPct').textContent = `${Math.round((summary.effectTurns / total) * 100)}% des choix`;
+
+            // Idle Playlist status & initial sync
+            if (idlePlaylist) {
+                const pBadge = document.getElementById('playlistStatusBadge');
+                if (!idlePlaylist.enabled) {
+                    pBadge.textContent = 'Désactivée';
+                    pBadge.className = 'badge badge-warn';
+                } else if (queueState.current) {
+                    pBadge.textContent = 'En pause (Visiteur actif)';
+                    pBadge.className = 'badge badge-info';
+                } else if (idlePlaylist.currentEffectName) {
+                    pBadge.textContent = `En rotation : ${idlePlaylist.currentEffectName}`;
+                    pBadge.className = 'badge badge-success';
+                } else {
+                    pBadge.textContent = 'Activée';
+                    pBadge.className = 'badge badge-success';
+                }
+
+                if (!playlistInitialized || !playlistDirty) {
+                    playlistInitialized = true;
+                    document.getElementById('playlistEnabledCheckbox').checked = Boolean(idlePlaylist.enabled);
+                    const intervalSelect = document.getElementById('playlistIntervalSelect');
+                    const intervalStr = String(idlePlaylist.intervalSeconds || 180);
+                    if (Array.from(intervalSelect.options).some(o => o.value === intervalStr)) {
+                        intervalSelect.value = intervalStr;
+                    }
+                    playlistSelectedIds = new Set((idlePlaylist.effects || []).map(id => String(id)));
+                    renderPlaylistChips();
+                }
+            }
 
             // Queue state
             const badge = document.getElementById('queueStateBadge');
@@ -745,7 +1006,9 @@
                 document.getElementById('adminCurrentTimer').textContent = `${m}:${String(s).padStart(2, '0')}`;
             } else {
                 document.getElementById('adminCurrentName').textContent = 'Aucun utilisateur actif';
-                document.getElementById('adminCurrentDetail').textContent = 'En attente dans la file...';
+                document.getElementById('adminCurrentDetail').textContent = idlePlaylist?.currentEffectName
+                    ? `Playlist de veille en cours : ${idlePlaylist.currentEffectName}`
+                    : 'En attente dans la file...';
                 document.getElementById('adminCurrentTimer').textContent = '--:--';
             }
 
