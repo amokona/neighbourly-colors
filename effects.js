@@ -1,4 +1,8 @@
-const FPS = 14; // ~70ms per frame over persistent HTTP keep-alive to /xled/v1/led/rt/frame
+import dgram from 'node:dgram';
+
+const FPS = 30; // Native Twinkly 30 FPS real-time streaming over UDP port 7777
+const UDP_PORT = 7777;
+const MAX_UDP_PAYLOAD = 900; // Divisible by both 3 (300 RGB LEDs) and 4 (225 RGBW LEDs)
 
 export const CUSTOM_EFFECTS = [
   {
@@ -265,7 +269,18 @@ class RealtimeEffectRunner {
     this.interval = null;
     this.keepAliveInterval = null;
     this.currentEffectId = null;
+    this.udpSocket = null;
     this.deviceMetaCache = new Map();
+  }
+
+  ensureUdpSocket() {
+    if (!this.udpSocket) {
+      this.udpSocket = dgram.createSocket('udp4');
+      this.udpSocket.on('error', (err) => {
+        console.warn('UDP socket error:', err.message);
+      });
+    }
+    return this.udpSocket;
   }
 
   async getDeviceMeta(client, ip) {
@@ -316,13 +331,34 @@ class RealtimeEffectRunner {
       });
     }
 
+    const totalBytes = numLeds * bytesPerLed;
+    const frameBuffer = Buffer.alloc(totalBytes);
+
+    // Pre-allocate UDP v3 fragment buffers (12-byte header + up to 900-byte payload)
+    const fragments = [];
+    let fragIndex = 0;
+    for (let byteOffset = 0; byteOffset < totalBytes; byteOffset += MAX_UDP_PAYLOAD) {
+      const payloadLength = Math.min(MAX_UDP_PAYLOAD, totalBytes - byteOffset);
+      const packetBuffer = Buffer.alloc(12 + payloadLength);
+      packetBuffer[0] = 0x03; // Protocol v3
+      packetBuffer[9] = 0x00;
+      packetBuffer[10] = 0x00;
+      packetBuffer[11] = fragIndex;
+      fragments.push({
+        byteOffset,
+        payloadLength,
+        packetBuffer
+      });
+      fragIndex++;
+    }
+
     const meta = {
       ip,
       numLeds,
       bytesPerLed,
       leds,
-      frameBuffer: Buffer.alloc(numLeds * bytesPerLed),
-      frameUrl: `http://${ip}/xled/v1/led/rt/frame`
+      frameBuffer,
+      fragments
     };
     this.deviceMetaCache.set(ip, meta);
     return meta;
@@ -331,6 +367,7 @@ class RealtimeEffectRunner {
   async start(getClientFn, ipsInput, effectId) {
     this.stop();
     this.currentEffectId = effectId;
+    const socket = this.ensureUdpSocket();
 
     const ips = Array.isArray(ipsInput) ? ipsInput : [ipsInput];
     const targets = [];
@@ -342,7 +379,9 @@ class RealtimeEffectRunner {
           const meta = await this.getDeviceMeta(client, ip);
           await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
           await client.setLEDOperationMode({ mode: 'rt' });
-          targets.push({ ip, client, meta, inFlight: false });
+          const tokenBase64 = client.getToken();
+          const tokenBytes = tokenBase64 ? Buffer.from(tokenBase64, 'base64') : null;
+          targets.push({ ip, client, meta, tokenBytes });
         } catch (err) {
           console.error(`Failed to initialize RT effect on ${ip}:`, err.message);
         }
@@ -355,74 +394,66 @@ class RealtimeEffectRunner {
 
     const startTime = Date.now();
 
-    const sendFrameToTarget = async (target, t) => {
-      if (this.currentEffectId !== effectId || target.inFlight) return;
-      const { client, meta } = target;
-      const tokenBase64 = client.getToken();
-      if (!tokenBase64) return;
+    const sendFrameToTarget = (target, t) => {
+      if (this.currentEffectId !== effectId) return;
+      const { ip, client, meta } = target;
 
-      target.inFlight = true;
-      try {
-        const { numLeds, bytesPerLed, leds, frameBuffer, frameUrl } = meta;
+      const latestToken = client.getToken();
+      if (latestToken && (!target.tokenBytes || target.lastTokenStr !== latestToken)) {
+        target.lastTokenStr = latestToken;
+        target.tokenBytes = Buffer.from(latestToken, 'base64');
+      }
+      if (!target.tokenBytes) return;
 
-        for (let i = 0; i < numLeds; i++) {
-          const [w, r, g, b] = evaluateLed(effectId, leds[i], t);
-          const offset = i * bytesPerLed;
-          if (bytesPerLed === 4) {
-            // Twinkly RGBW byte order: W, R, G, B
-            frameBuffer[offset] = w;
-            frameBuffer[offset + 1] = r;
-            frameBuffer[offset + 2] = g;
-            frameBuffer[offset + 3] = b;
-          } else {
-            // Twinkly RGB byte order: R, G, B
-            frameBuffer[offset] = r;
-            frameBuffer[offset + 1] = g;
-            frameBuffer[offset + 2] = b;
-          }
+      const { numLeds, bytesPerLed, leds, frameBuffer, fragments } = meta;
+
+      for (let i = 0; i < numLeds; i++) {
+        const [w, r, g, b] = evaluateLed(effectId, leds[i], t);
+        const offset = i * bytesPerLed;
+        if (bytesPerLed === 4) {
+          // Twinkly RGBW byte order: W, R, G, B
+          frameBuffer[offset] = w;
+          frameBuffer[offset + 1] = r;
+          frameBuffer[offset + 2] = g;
+          frameBuffer[offset + 3] = b;
+        } else {
+          // Twinkly RGB byte order: R, G, B
+          frameBuffer[offset] = r;
+          frameBuffer[offset + 1] = g;
+          frameBuffer[offset + 2] = b;
         }
+      }
 
-        const res = await fetch(frameUrl, {
-          method: 'POST',
-          headers: {
-            'X-Auth-Token': tokenBase64,
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': String(frameBuffer.length)
-          },
-          body: frameBuffer
-        });
-
-        // If token expired (401), re-authenticate automatically
-        if (res.status === 401) {
-          client.tokenData = undefined;
-          await client.getDeviceDetails();
-          await client.setLEDOperationMode({ mode: 'rt' });
-        }
-      } catch (_) {
-        // Ignore transient network hiccups during real-time loop
-      } finally {
-        target.inFlight = false;
+      for (let f = 0; f < fragments.length; f++) {
+        const { byteOffset, payloadLength, packetBuffer } = fragments[f];
+        target.tokenBytes.copy(packetBuffer, 1, 0, 8);
+        frameBuffer.copy(packetBuffer, 12, byteOffset, byteOffset + payloadLength);
+        socket.send(packetBuffer, 0, packetBuffer.length, UDP_PORT, ip);
       }
     };
 
     const sendAllFrames = () => {
       if (this.currentEffectId !== effectId) return;
       const t = (Date.now() - startTime) / 1000;
-      for (const target of targets) {
-        sendFrameToTarget(target, t);
+      for (let i = 0; i < targets.length; i++) {
+        sendFrameToTarget(targets[i], t);
       }
     };
 
     this.interval = setInterval(sendAllFrames, Math.round(1000 / FPS));
     sendAllFrames();
 
-    // Keep RT mode active across all controllers in the group
+    // Keep RT mode and auth tokens active across all controllers in the group
     this.keepAliveInterval = setInterval(async () => {
       if (this.currentEffectId !== effectId) return;
       await Promise.allSettled(
-        targets.map(({ client }) => client.setLEDOperationMode({ mode: 'rt' }))
+        targets.map(async (target) => {
+          try {
+            await target.client.setLEDOperationMode({ mode: 'rt' });
+          } catch (_) {}
+        })
       );
-    }, 25000);
+    }, 20000);
   }
 
   stop() {
