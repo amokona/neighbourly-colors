@@ -18,6 +18,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TWINKLY_IP = process.env.TWINKLY_IP || 'fallback';
+const TWINKLY_IPS = Array.from(
+  new Set(
+    [
+      TWINKLY_IP,
+      ...(process.env.TWINKLY_IPS || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+    ].filter(ip => ip && ip !== 'fallback')
+  )
+);
+if (TWINKLY_IPS.length === 0) {
+  TWINKLY_IPS.push(TWINKLY_IP);
+}
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN || '';
 const DEFAULT_MOVIE_ID = process.env.DEFAULT_MOVIE_ID !== undefined && process.env.DEFAULT_MOVIE_ID !== ''
@@ -158,16 +172,41 @@ function recordQueueTurn({ nickname, type, color, movieId, ip }) {
 
 loadUsageData();
 
-// Helper to apply either a custom 3D effect or an on-device movie
-async function applyEffectOrMovie(client, movieId) {
+// Run an async operation across all configured Twinkly controllers in the group
+async function forAllControllers(actionFn) {
+  const results = await Promise.allSettled(
+    TWINKLY_IPS.map(ip => actionFn(getClient(ip), ip))
+  );
+  const fulfilled = results.filter(r => r.status === 'fulfilled');
+  if (fulfilled.length === 0 && results.length > 0) {
+    throw results[0].reason || new Error('Aucun contrôleur Twinkly n\'a répondu');
+  }
+  return results;
+}
+
+// Helper to apply either a custom 3D effect or an on-device movie across all controllers
+async function applyEffectOrMovie(movieId) {
   if (isCustomEffectId(movieId)) {
-    await effectRunner.start(client, TWINKLY_IP, movieId);
+    await effectRunner.start(getClient, TWINKLY_IPS, movieId);
   } else {
     effectRunner.stop();
-    await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-    await client.setCurrentMovie({ id: Number(movieId) });
-    await client.setLEDOperationMode({ mode: 'movie' });
+    const numericId = Number(movieId);
+    await forAllControllers(async (client) => {
+      await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
+      await client.setCurrentMovie({ id: numericId });
+      await client.setLEDOperationMode({ mode: 'movie' });
+    });
   }
+}
+
+// Helper to apply a solid RGB color across all controllers
+async function applySolidColor({ r, g, b }) {
+  effectRunner.stop();
+  await forAllControllers(async (client) => {
+    await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
+    await client.setLEDOperationMode({ mode: 'color' });
+    await client.setLEDColor({ r, g, b });
+  });
 }
 
 // Trust first reverse proxy so req.ip reflects the real client IP safely
@@ -286,8 +325,7 @@ async function processNextInQueue() {
 
     if (DEFAULT_MOVIE_ID !== null && DEFAULT_MOVIE_ID !== '') {
       try {
-        const client = getClient(TWINKLY_IP);
-        await applyEffectOrMovie(client, DEFAULT_MOVIE_ID);
+        await applyEffectOrMovie(DEFAULT_MOVIE_ID);
         console.log(`Queue empty: reverted to default movie/effect ${DEFAULT_MOVIE_ID}`);
       } catch (error) {
         console.error('Error reverting to default movie:', error);
@@ -305,20 +343,15 @@ async function processNextInQueue() {
   console.log(`Processing queue item for ${currentUser.nickname}`);
 
   try {
-    const client = getClient(TWINKLY_IP);
-
     if (currentUser.type === 'color') {
-      effectRunner.stop();
       const hex = currentUser.color.slice(1);
       const r = parseInt(hex.slice(0, 2), 16);
       const g = parseInt(hex.slice(2, 4), 16);
       const b = parseInt(hex.slice(4, 6), 16);
 
-      await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-      await client.setLEDOperationMode({ mode: 'color' });
-      await client.setLEDColor({ r, g, b });
+      await applySolidColor({ r, g, b });
     } else {
-      await applyEffectOrMovie(client, currentUser.movieId);
+      await applyEffectOrMovie(currentUser.movieId);
     }
 
     console.log(`Applied ${currentUser.type} for ${currentUser.nickname}`);
@@ -363,6 +396,15 @@ app.get('/api/info', requireAdmin, async (req, res) => {
   try {
     const client = getClient(TWINKLY_IP);
     const info = await client.getDeviceDetails();
+    try {
+      const summary = await client.getSummary();
+      if (summary?.group?.size) {
+        info.group_leds = summary.group.size;
+        info.number_of_led = summary.group.size;
+      }
+    } catch (_) {}
+    info.controllers_count = TWINKLY_IPS.length;
+    info.controllers = TWINKLY_IPS;
     res.json(info);
   } catch (error) {
     console.error('Error getting device info:', error);
@@ -394,12 +436,12 @@ app.post('/api/mode', requireAdmin, async (req, res) => {
       effectRunner.stop();
     }
 
-    const client = getClient(TWINKLY_IP);
-    await client.setLEDOperationMode({ mode });
-
-    if (mode === 'movie' || mode === 'color') {
-      await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-    }
+    await forAllControllers(async (client) => {
+      await client.setLEDOperationMode({ mode });
+      if (mode === 'movie' || mode === 'color') {
+        await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
+      }
+    });
 
     addLogEntry({
       event: 'admin_action',
@@ -425,11 +467,7 @@ app.post('/api/color', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'RGB values required' });
     }
 
-    effectRunner.stop();
-    const client = getClient(TWINKLY_IP);
-    await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-    await client.setLEDOperationMode({ mode: 'color' });
-    await client.setLEDColor({ r, g, b });
+    await applySolidColor({ r, g, b });
 
     const hex = '#' + [r, g, b].map(v => Number(v).toString(16).padStart(2, '0')).join('');
     addLogEntry({
@@ -458,8 +496,9 @@ app.post('/api/brightness', requireAdmin, async (req, res) => {
     }
 
     const value = Math.max(0, Math.min(100, Number(brightness)));
-    const client = getClient(TWINKLY_IP);
-    await client.setLEDBrightness({ value, mode: 'enabled', type: 'A' });
+    await forAllControllers(async (client) => {
+      await client.setLEDBrightness({ value, mode: 'enabled', type: 'A' });
+    });
 
     addLogEntry({
       event: 'admin_action',
@@ -552,9 +591,8 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Movie ID required' });
     }
 
-    const client = getClient(TWINKLY_IP);
     const targetId = isCustomEffectId(movie_id) ? movie_id : Number(movie_id);
-    await applyEffectOrMovie(client, targetId);
+    await applyEffectOrMovie(targetId);
 
     const movieName = knownMovies[targetId] || `Effet #${targetId}`;
     addLogEntry({
@@ -860,6 +898,7 @@ app.get('/api/queue/status', (req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🎄 Serveur Twinkly en cours d'exécution sur http://localhost:${PORT}`);
+  console.log(`Contrôleurs Twinkly (${TWINKLY_IPS.length}): ${TWINKLY_IPS.join(', ')}`);
   console.log(`Tableau de bord Admin: http://localhost:${PORT}/admin`);
   console.log(`API disponible à http://localhost:${PORT}/api`);
 });

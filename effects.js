@@ -200,11 +200,11 @@ function evaluateLed(effectId, led, t) {
       const shimmer = Math.pow(Math.max(0, Math.sin(t * 2.5 + index * 0.9)), 6);
       const w = Math.round(shimmer * 180);
       if (group === 0) {
-        return [w, 255, 15, 15]; // Red
+        return [w, 255, Math.min(255, 15 + w), Math.min(255, 15 + w)]; // Red + sparkle
       } else if (group === 1) {
-        return [w, 10, 240, 25]; // Green
+        return [w, Math.min(255, 10 + w), 240, Math.min(255, 25 + w)]; // Green + sparkle
       } else {
-        return [Math.max(110, w), 255, 175, 25]; // Warm Gold
+        return [Math.max(110, w), 255, Math.min(255, 175 + Math.round(w * 0.4)), Math.min(255, 25 + Math.round(w * 0.6))]; // Warm Gold + sparkle
       }
     }
 
@@ -265,7 +265,6 @@ class RealtimeEffectRunner {
     this.interval = null;
     this.keepAliveInterval = null;
     this.currentEffectId = null;
-    this.inFlight = false;
     this.deviceMetaCache = new Map();
   }
 
@@ -278,76 +277,105 @@ class RealtimeEffectRunner {
     const numLeds = details.number_of_led || 600;
     const bytesPerLed = details.bytes_per_led || 4;
 
+    let groupOffset = 0;
+    try {
+      const summary = await client.getSummary();
+      if (summary?.group?.offset && Number.isFinite(summary.group.offset)) {
+        groupOffset = summary.group.offset;
+      }
+    } catch (_) {
+      // Optional group offset metadata
+    }
+
     let leds = [];
     try {
       const layout = await client.getLayout();
       if (layout && Array.isArray(layout.coordinates) && layout.coordinates.length === numLeds) {
-        let minY = Infinity, maxY = -Infinity;
-        layout.coordinates.forEach(c => {
-          if (c.y < minY) minY = c.y;
-          if (c.y > maxY) maxY = c.y;
-        });
-        const spanY = Math.max(0.001, maxY - minY);
-        leds = layout.coordinates.map((c, index) => {
+        // Twinkly layout coordinates are already normalized in global group 3D space (y in 0..1, x/z in -1..1)
+        leds = layout.coordinates.map((c, localIdx) => {
           const nx = c.x || 0;
-          const ny = (c.y - minY) / spanY;
+          const ny = Math.max(0, Math.min(1, c.y ?? 0.5));
           const nz = c.z || 0;
           const angle = (Math.atan2(nz, nx) / (Math.PI * 2) + 1) % 1;
-          return { x: nx, y: ny, z: nz, angle, index };
+          return { x: nx, y: ny, z: nz, angle, index: groupOffset + localIdx };
         });
       }
     } catch (err) {
-      console.warn('Could not load 3D layout, falling back to spiral coordinates:', err.message);
+      console.warn(`Could not load 3D layout for ${ip}, falling back to spiral coordinates:`, err.message);
     }
 
     if (leds.length !== numLeds) {
-      leds = Array.from({ length: numLeds }, (_, index) => {
-        const y = index / Math.max(1, numLeds - 1);
+      leds = Array.from({ length: numLeds }, (_, localIdx) => {
+        const y = localIdx / Math.max(1, numLeds - 1);
         const radius = 1 - y * 0.85;
-        const theta = index * 0.25;
+        const theta = localIdx * 0.25;
         const x = Math.cos(theta) * radius;
         const z = Math.sin(theta) * radius;
         const angle = ((theta / (Math.PI * 2)) % 1 + 1) % 1;
-        return { x, y, z, angle, index };
+        return { x, y, z, angle, index: groupOffset + localIdx };
       });
     }
 
-    const meta = { numLeds, bytesPerLed, leds };
+    const meta = {
+      ip,
+      numLeds,
+      bytesPerLed,
+      leds,
+      frameBuffer: Buffer.alloc(numLeds * bytesPerLed),
+      frameUrl: `http://${ip}/xled/v1/led/rt/frame`
+    };
     this.deviceMetaCache.set(ip, meta);
     return meta;
   }
 
-  async start(client, ip, effectId) {
+  async start(getClientFn, ipsInput, effectId) {
     this.stop();
     this.currentEffectId = effectId;
 
-    const meta = await this.getDeviceMeta(client, ip);
-    await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-    await client.setLEDOperationMode({ mode: 'rt' });
+    const ips = Array.isArray(ipsInput) ? ipsInput : [ipsInput];
+    const targets = [];
+
+    await Promise.allSettled(
+      ips.map(async (ip) => {
+        try {
+          const client = typeof getClientFn === 'function' ? getClientFn(ip) : getClientFn;
+          const meta = await this.getDeviceMeta(client, ip);
+          await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
+          await client.setLEDOperationMode({ mode: 'rt' });
+          targets.push({ ip, client, meta, inFlight: false });
+        } catch (err) {
+          console.error(`Failed to initialize RT effect on ${ip}:`, err.message);
+        }
+      })
+    );
+
+    if (targets.length === 0) {
+      throw new Error('Aucun contrôleur Twinkly accessible pour l\'effet 3D');
+    }
 
     const startTime = Date.now();
-    const frameBuffer = Buffer.alloc(meta.numLeds * meta.bytesPerLed);
-    const frameUrl = `http://${ip}/xled/v1/led/rt/frame`;
 
-    const sendFrame = async () => {
-      if (this.currentEffectId !== effectId || this.inFlight) return;
+    const sendFrameToTarget = async (target, t) => {
+      if (this.currentEffectId !== effectId || target.inFlight) return;
+      const { client, meta } = target;
       const tokenBase64 = client.getToken();
       if (!tokenBase64) return;
 
-      this.inFlight = true;
+      target.inFlight = true;
       try {
-        const t = (Date.now() - startTime) / 1000;
+        const { numLeds, bytesPerLed, leds, frameBuffer, frameUrl } = meta;
 
-        for (let i = 0; i < meta.numLeds; i++) {
-          const [w, r, g, b] = evaluateLed(effectId, meta.leds[i], t);
-          const offset = i * meta.bytesPerLed;
-          if (meta.bytesPerLed === 4) {
+        for (let i = 0; i < numLeds; i++) {
+          const [w, r, g, b] = evaluateLed(effectId, leds[i], t);
+          const offset = i * bytesPerLed;
+          if (bytesPerLed === 4) {
             // Twinkly RGBW byte order: W, R, G, B
             frameBuffer[offset] = w;
             frameBuffer[offset + 1] = r;
             frameBuffer[offset + 2] = g;
             frameBuffer[offset + 3] = b;
           } else {
+            // Twinkly RGB byte order: R, G, B
             frameBuffer[offset] = r;
             frameBuffer[offset + 1] = g;
             frameBuffer[offset + 2] = b;
@@ -370,28 +398,35 @@ class RealtimeEffectRunner {
           await client.getDeviceDetails();
           await client.setLEDOperationMode({ mode: 'rt' });
         }
-      } catch (err) {
+      } catch (_) {
         // Ignore transient network hiccups during real-time loop
       } finally {
-        this.inFlight = false;
+        target.inFlight = false;
       }
     };
 
-    this.interval = setInterval(sendFrame, Math.round(1000 / FPS));
-    sendFrame();
+    const sendAllFrames = () => {
+      if (this.currentEffectId !== effectId) return;
+      const t = (Date.now() - startTime) / 1000;
+      for (const target of targets) {
+        sendFrameToTarget(target, t);
+      }
+    };
 
-    // Keep RT mode active
+    this.interval = setInterval(sendAllFrames, Math.round(1000 / FPS));
+    sendAllFrames();
+
+    // Keep RT mode active across all controllers in the group
     this.keepAliveInterval = setInterval(async () => {
       if (this.currentEffectId !== effectId) return;
-      try {
-        await client.setLEDOperationMode({ mode: 'rt' });
-      } catch (_) {}
+      await Promise.allSettled(
+        targets.map(({ client }) => client.setLEDOperationMode({ mode: 'rt' }))
+      );
     }, 25000);
   }
 
   stop() {
     this.currentEffectId = null;
-    this.inFlight = false;
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
