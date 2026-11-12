@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +12,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TWINKLY_IP = process.env.TWINKLY_IP || 'fallback';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN || '';
 const DEFAULT_MOVIE_ID = process.env.DEFAULT_MOVIE_ID !== undefined && process.env.DEFAULT_MOVIE_ID !== ''
   ? Number(process.env.DEFAULT_MOVIE_ID)
   : null;
@@ -20,6 +22,41 @@ const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 const DATA_DIR = path.join(__dirname, 'data');
 const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 const MAX_LOGS = 500;
+
+// In-memory active session tokens (token -> expiry timestamp)
+const activeSessions = new Map();
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function timingSafeCompare(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function parseCookies(cookieHeader = '') {
+  const cookies = {};
+  cookieHeader.split(';').forEach(part => {
+    const idx = part.indexOf('=');
+    if (idx !== -1) {
+      const key = part.slice(0, idx).trim();
+      const val = decodeURIComponent(part.slice(idx + 1).trim());
+      cookies[key] = val;
+    }
+  });
+  return cookies;
+}
+
+function isValidSessionToken(token) {
+  if (!token) return false;
+  const expiresAt = activeSessions.get(token);
+  if (!expiresAt) return false;
+  if (Date.now() > expiresAt) {
+    activeSessions.delete(token);
+    return false;
+  }
+  return true;
+}
 
 // Persistent usage stats & logs
 let usageData = {
@@ -120,28 +157,84 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware to protect direct device-control & admin endpoints
+// Middleware to require admin login on all admin & direct-control endpoints
 function requireAdmin(req, res, next) {
-  if (ADMIN_TOKEN) {
-    const authHeader = req.headers.authorization || '';
-    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    const headerToken = req.headers['x-admin-token'] || bearerToken;
-    if (headerToken === ADMIN_TOKEN) {
-      return next();
-    }
-    return res.status(401).json({ error: 'Jeton administrateur (ADMIN_TOKEN) requis ou invalide' });
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      error: 'ADMIN_PASSWORD non configuré sur le serveur. Définissez ADMIN_PASSWORD dans docker-compose.yml.'
+    });
   }
 
-  // If no ADMIN_TOKEN is configured, allow direct LAN/local access (not forwarded via public reverse proxy)
-  const isForwarded = Boolean(req.headers['x-forwarded-for']);
-  if (!isForwarded) {
+  const cookies = parseCookies(req.headers.cookie);
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const token = cookies.twinkly_admin_session || req.headers['x-admin-token'] || bearerToken;
+
+  if (isValidSessionToken(token) || timingSafeCompare(token, ADMIN_PASSWORD)) {
     return next();
   }
 
-  return res.status(403).json({
-    error: 'Configurez ADMIN_TOKEN dans docker-compose.yml pour accéder à l\'administration via le domaine public, ou connectez-vous via l\'IP locale (:3000/admin).'
-  });
+  return res.status(401).json({ error: 'Authentification requise' });
 }
+
+// Admin Login & Logout endpoints
+app.post('/api/admin/login', (req, res) => {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      error: 'ADMIN_PASSWORD non configuré sur le serveur.'
+    });
+  }
+
+  const { username, password } = req.body || {};
+  const userOk = timingSafeCompare(username || '', ADMIN_USER);
+  const passOk = timingSafeCompare(password || '', ADMIN_PASSWORD);
+
+  if (!userOk || !passOk) {
+    addLogEntry({
+      event: 'admin_login_failed',
+      nickname: String(username || 'inconnu').slice(0, 20),
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'error',
+      details: 'Tentative de connexion admin échouée'
+    });
+    return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
+  }
+
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  activeSessions.set(sessionToken, Date.now() + SESSION_TTL_MS);
+
+  res.setHeader(
+    'Set-Cookie',
+    `twinkly_admin_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`
+  );
+
+  addLogEntry({
+    event: 'admin_action',
+    nickname: ADMIN_USER,
+    ip: req.ip || req.socket?.remoteAddress,
+    status: 'info',
+    details: 'Connexion à l\'interface d\'administration'
+  });
+
+  res.json({ success: true, token: sessionToken, username: ADMIN_USER });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  const cookies = parseCookies(req.headers.cookie);
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const token = cookies.twinkly_admin_session || req.headers['x-admin-token'] || bearerToken;
+
+  if (token) {
+    activeSessions.delete(token);
+  }
+
+  res.setHeader(
+    'Set-Cookie',
+    'twinkly_admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+  );
+  res.json({ success: true });
+});
 
 // Queue system
 let queue = [];
@@ -234,7 +327,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Twinkly server is running!' });
 });
 
-// Get device information (admin/local only)
+// Get device information (admin only)
 app.get('/api/info', requireAdmin, async (req, res) => {
   try {
     const client = getClient(TWINKLY_IP);
@@ -246,7 +339,7 @@ app.get('/api/info', requireAdmin, async (req, res) => {
   }
 });
 
-// Get current mode (admin/local only)
+// Get current mode (admin only)
 app.get('/api/mode', requireAdmin, async (req, res) => {
   try {
     const client = getClient(TWINKLY_IP);
@@ -258,7 +351,7 @@ app.get('/api/mode', requireAdmin, async (req, res) => {
   }
 });
 
-// Set operation mode (on/off) (admin/local only)
+// Set operation mode (on/off) (admin only)
 app.post('/api/mode', requireAdmin, async (req, res) => {
   try {
     const { mode } = req.body;
@@ -269,14 +362,13 @@ app.post('/api/mode', requireAdmin, async (req, res) => {
     const client = getClient(TWINKLY_IP);
     await client.setLEDOperationMode({ mode });
 
-    // Always set brightness to 100% when turning on
     if (mode === 'movie' || mode === 'color') {
       await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
     }
 
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       type: 'mode',
       status: 'success',
@@ -290,7 +382,7 @@ app.post('/api/mode', requireAdmin, async (req, res) => {
   }
 });
 
-// Set solid color (admin/local only)
+// Set solid color (admin only)
 app.post('/api/color', requireAdmin, async (req, res) => {
   try {
     const { r, g, b } = req.body;
@@ -306,7 +398,7 @@ app.post('/api/color', requireAdmin, async (req, res) => {
     const hex = '#' + [r, g, b].map(v => Number(v).toString(16).padStart(2, '0')).join('');
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       type: 'color',
       color: hex,
@@ -321,7 +413,7 @@ app.post('/api/color', requireAdmin, async (req, res) => {
   }
 });
 
-// Set brightness (admin/local only)
+// Set brightness (admin only)
 app.post('/api/brightness', requireAdmin, async (req, res) => {
   try {
     const { brightness } = req.body;
@@ -335,7 +427,7 @@ app.post('/api/brightness', requireAdmin, async (req, res) => {
 
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       type: 'brightness',
       status: 'success',
@@ -349,7 +441,7 @@ app.post('/api/brightness', requireAdmin, async (req, res) => {
   }
 });
 
-// Get brightness (admin/local only)
+// Get brightness (admin only)
 app.get('/api/brightness', requireAdmin, async (req, res) => {
   try {
     const client = getClient(TWINKLY_IP);
@@ -361,7 +453,7 @@ app.get('/api/brightness', requireAdmin, async (req, res) => {
   }
 });
 
-// Discover devices on the network (admin/local only)
+// Discover devices on the network (admin only)
 app.get('/api/discover', requireAdmin, async (req, res) => {
   try {
     const { discover } = await import('@twinklyjs/twinkly');
@@ -392,7 +484,7 @@ app.get('/api/movies', async (req, res) => {
   }
 });
 
-// Get current movie (admin/local only)
+// Get current movie (admin only)
 app.get('/api/current-movie', requireAdmin, async (req, res) => {
   try {
     const client = getClient(TWINKLY_IP);
@@ -404,7 +496,7 @@ app.get('/api/current-movie', requireAdmin, async (req, res) => {
   }
 });
 
-// Set current movie (admin/local only)
+// Set current movie (admin only)
 app.post('/api/current-movie', requireAdmin, async (req, res) => {
   try {
     const { movie_id } = req.body;
@@ -421,7 +513,7 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
     const movieName = knownMovies[parsedId] || `Effet #${parsedId}`;
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       type: 'effect',
       movieId: parsedId,
@@ -505,7 +597,7 @@ app.post('/api/admin/queue/skip', requireAdmin, async (req, res) => {
     const skippedUser = currentUser ? currentUser.nickname : null;
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       status: 'info',
       details: skippedUser ? `Tour de "${skippedUser}" passé par l'admin` : 'Passage au suivant demandé'
@@ -527,7 +619,7 @@ app.post('/api/admin/queue/remove', requireAdmin, (req, res) => {
     const [removed] = queue.splice(index, 1);
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       status: 'info',
       details: `"${removed.nickname}" retiré de la file d'attente`
@@ -547,7 +639,7 @@ app.post('/api/admin/queue/clear', requireAdmin, async (req, res) => {
     }
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       status: 'info',
       details: `File d'attente vidée (${count} en attente supprimé(s))`
@@ -563,7 +655,7 @@ app.post('/api/admin/queue/pause', requireAdmin, (req, res) => {
     queuePaused = typeof req.body?.paused === 'boolean' ? req.body.paused : !queuePaused;
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       status: 'info',
       details: queuePaused ? 'File d\'attente mise en pause' : 'File d\'attente réactivée'
@@ -580,7 +672,7 @@ app.post('/api/admin/logs/clear', requireAdmin, (req, res) => {
     saveUsageData();
     addLogEntry({
       event: 'admin_action',
-      nickname: 'Admin',
+      nickname: ADMIN_USER,
       ip: req.ip || req.socket?.remoteAddress,
       status: 'info',
       details: 'Journal d\'activité effacé'

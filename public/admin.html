@@ -19,9 +19,79 @@
             color: #1e293b;
         }
 
+        /* Login Screen */
+        .login-wrapper {
+            min-height: calc(100vh - 48px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            padding: 36px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        .login-card h1 {
+            font-size: 22px;
+            text-align: center;
+            margin-bottom: 6px;
+            color: #1e293b;
+        }
+
+        .login-card .subtitle {
+            text-align: center;
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 24px;
+        }
+
+        .login-field {
+            margin-bottom: 16px;
+        }
+
+        .login-field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 6px;
+        }
+
+        .login-field input {
+            width: 100%;
+            padding: 11px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+
+        .login-field input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .login-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        /* Dashboard */
         .dashboard {
             max-width: 1150px;
             margin: 0 auto;
+            display: none;
         }
 
         .topbar {
@@ -53,14 +123,6 @@
             gap: 8px;
             align-items: center;
             flex-wrap: wrap;
-        }
-
-        .auth-box input {
-            padding: 9px 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            width: 210px;
         }
 
         .btn {
@@ -354,16 +416,44 @@
     </style>
 </head>
 <body>
-    <div class="dashboard">
+    <!-- Login Gate -->
+    <div class="login-wrapper" id="loginView">
+        <form class="login-card" onsubmit="handleLogin(event)">
+            <h1>🔒 Connexion Admin</h1>
+            <div class="subtitle">Administration & Statistiques du Sapin Twinkly</div>
+
+            <div class="login-error" id="loginError"></div>
+
+            <div class="login-field">
+                <label for="loginUsername">Identifiant</label>
+                <input type="text" id="loginUsername" value="admin" autocomplete="username" required>
+            </div>
+
+            <div class="login-field">
+                <label for="loginPassword">Mot de passe</label>
+                <input type="password" id="loginPassword" placeholder="Votre mot de passe admin" autocomplete="current-password" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; padding:12px; font-size:15px;">
+                Se connecter
+            </button>
+
+            <div style="text-align:center; margin-top:16px;">
+                <a href="/" style="font-size:13px; color:#64748b; text-decoration:none;">← Retour à la page publique</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Authenticated Dashboard -->
+    <div class="dashboard" id="dashboardView">
         <div class="topbar">
             <div>
                 <h1>🎄 Administration & Statistiques du Sapin</h1>
                 <div class="subtitle">Contrôle direct, gestion de la file d'attente et journal d'utilisation</div>
             </div>
             <div class="auth-box">
-                <input type="password" id="adminTokenInput" placeholder="Jeton ADMIN_TOKEN (si configuré)">
-                <button class="btn btn-primary" onclick="saveToken()">Connexion</button>
                 <a href="/" class="btn btn-secondary" style="text-decoration:none;">← Page Publique</a>
+                <button class="btn btn-danger" onclick="handleLogout()">Déconnexion</button>
             </div>
         </div>
 
@@ -501,14 +591,28 @@
 
     <script>
         const API_BASE = '/api';
-        let adminToken = localStorage.getItem('twinkly_admin_token') || '';
-        document.getElementById('adminTokenInput').value = adminToken;
+        let sessionToken = sessionStorage.getItem('twinkly_admin_session') || '';
+        let statsInterval = null;
 
         function getHeaders(includeJson = false) {
             const headers = {};
             if (includeJson) headers['Content-Type'] = 'application/json';
-            if (adminToken) headers['x-admin-token'] = adminToken;
+            if (sessionToken) headers['x-admin-token'] = sessionToken;
             return headers;
+        }
+
+        function setAuthenticatedUI(authenticated) {
+            document.getElementById('loginView').style.display = authenticated ? 'none' : 'flex';
+            document.getElementById('dashboardView').style.display = authenticated ? 'block' : 'none';
+            if (authenticated) {
+                loadAdminMovies();
+                if (!statsInterval) {
+                    statsInterval = setInterval(loadAdminStats, 2000);
+                }
+            } else if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
         }
 
         function showAlert(msg, type = 'error') {
@@ -521,12 +625,44 @@
             }
         }
 
-        function saveToken() {
-            adminToken = document.getElementById('adminTokenInput').value.trim();
-            localStorage.setItem('twinkly_admin_token', adminToken);
-            showAlert('Jeton enregistré. Actualisation...', 'success');
-            loadAdminStats();
-            loadAdminMovies();
+        async function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errEl = document.getElementById('loginError');
+            errEl.style.display = 'none';
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    errEl.textContent = data.error || 'Échec de la connexion';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                sessionToken = data.token || '';
+                sessionStorage.setItem('twinkly_admin_session', sessionToken);
+                document.getElementById('loginPassword').value = '';
+                setAuthenticatedUI(true);
+                loadAdminStats();
+            } catch (err) {
+                errEl.textContent = 'Erreur réseau lors de la connexion';
+                errEl.style.display = 'block';
+            }
+        }
+
+        async function handleLogout() {
+            await fetch(`${API_BASE}/admin/logout`, {
+                method: 'POST',
+                headers: getHeaders()
+            }).catch(() => {});
+            sessionToken = '';
+            sessionStorage.removeItem('twinkly_admin_session');
+            setAuthenticatedUI(false);
         }
 
         async function loadAdminMovies() {
@@ -553,12 +689,19 @@
                 const res = await fetch(`${API_BASE}/admin/stats`, {
                     headers: getHeaders()
                 });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    showAlert(err.error || `Erreur d'accès (${res.status})`, 'error');
+                if (res.status === 401 || res.status === 503) {
+                    setAuthenticatedUI(false);
+                    if (res.status === 503) {
+                        const err = await res.json().catch(() => ({}));
+                        const errEl = document.getElementById('loginError');
+                        errEl.textContent = err.error || 'ADMIN_PASSWORD non configuré';
+                        errEl.style.display = 'block';
+                    }
                     return;
                 }
+                if (!res.ok) return;
                 const data = await res.json();
+                setAuthenticatedUI(true);
                 renderStats(data);
             } catch (error) {
                 console.error('Failed to load admin stats:', error);
@@ -866,9 +1009,8 @@
             }
         }
 
-        loadAdminMovies();
+        // Check existing session on load
         loadAdminStats();
-        setInterval(loadAdminStats, 2000);
     </script>
 </body>
 </html>
