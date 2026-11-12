@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contrôleur de Lumières Twinkly</title>
+    <title>Contrôleur de Lumières Twinkly — 2400 LED</title>
     <style>
         * {
             margin: 0;
@@ -12,201 +12,344 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background: radial-gradient(circle at top, #1e1b4b 0%, #0f172a 55%, #020617 100%);
             color: #f8fafc;
             min-height: 100vh;
             display: flex;
             justify-content: center;
-            align-items: center;
-            padding: 20px;
+            align-items: flex-start;
+            padding: 16px;
         }
 
-        .container {
+        @media (min-width: 640px) {
+            body {
+                align-items: center;
+                padding: 24px;
+            }
+        }
+
+        .app-shell {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 24px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+            max-width: 580px;
+            width: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Header & Live Status */
+        .top-bar {
+            padding: 20px 20px 16px;
+            background: rgba(30, 41, 59, 0.85);
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .title-group h1 {
+            font-size: 20px;
+            font-weight: 800;
+            color: #f8fafc;
+            letter-spacing: -0.01em;
+        }
+
+        .title-group .subtitle {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        .queue-toggle-btn {
             background: #1e293b;
             border: 1px solid #334155;
-            border-radius: 20px;
-            padding: 36px;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65);
-            max-width: 660px;
-            width: 100%;
-        }
-
-        h1 {
-            color: #f8fafc;
-            margin-bottom: 8px;
-            text-align: center;
-        }
-
-        .subtitle {
-            text-align: center;
-            color: #94a3b8;
-            margin-bottom: 26px;
-            font-size: 14px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #cbd5e1;
-            font-weight: 600;
-        }
-
-        input[type="text"],
-        input[type="number"] {
-            width: 100%;
-            padding: 12px;
-            background: #0f172a;
-            color: #f8fafc;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s, box-shadow 0.3s;
-        }
-
-        input[type="text"]::placeholder,
-        input[type="number"]::placeholder {
-            color: #64748b;
-        }
-
-        input[type="text"]:focus,
-        input[type="number"]:focus {
-            outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
-        }
-
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
+            color: #a5b4fc;
+            padding: 7px 13px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.45);
-        }
-
-        .btn-large {
-            width: 100%;
-            padding: 16px;
-            font-size: 18px;
-        }
-
-        .color-picker-group {
-            display: flex;
-            gap: 12px;
+            transition: all 0.2s;
+            white-space: nowrap;
+            display: inline-flex;
             align-items: center;
-            background: #0f172a;
-            padding: 10px 14px;
-            border-radius: 10px;
-            border: 1px solid #334155;
+            gap: 6px;
         }
 
-        input[type="color"] {
-            width: 60px;
-            height: 46px;
-            border: 1px solid #475569;
-            border-radius: 8px;
-            background: transparent;
-            cursor: pointer;
+        .queue-toggle-btn:hover {
+            border-color: #6366f1;
+            color: #ffffff;
         }
 
-        .status {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 14px;
-            display: none;
+        .live-banner {
+            background: linear-gradient(135deg, rgba(49, 46, 129, 0.75) 0%, rgba(30, 41, 59, 0.9) 55%, rgba(88, 28, 135, 0.7) 100%);
+            border: 1px solid rgba(99, 102, 241, 0.35);
+            border-radius: 14px;
+            padding: 13px 15px;
         }
 
-        .status.success {
-            background: rgba(16, 185, 129, 0.15);
-            color: #6ee7b7;
-            border: 1px solid rgba(16, 185, 129, 0.35);
+        .live-row-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 13px;
         }
 
-        .status.error {
-            background: rgba(239, 68, 68, 0.15);
-            color: #fca5a5;
-            border: 1px solid rgba(239, 68, 68, 0.35);
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e2e8f0;
+            min-width: 0;
         }
 
-        .status.info {
-            background: rgba(56, 189, 248, 0.15);
-            color: #7dd3fc;
-            border: 1px solid rgba(56, 189, 248, 0.35);
+        .live-indicator strong {
+            color: #ffffff;
+             truncate: ellipsis;
         }
 
-        .movies-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .pulse-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 8px rgba(52, 211, 153, 0.8);
+            animation: pulseDot 1.8s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        .pulse-dot.idle {
+            background: #60a5fa;
+            box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+        }
+
+        .live-timer {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: #a5b4fc;
+            flex-shrink: 0;
+        }
+
+        .live-row-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             gap: 12px;
-            max-height: 360px;
-            overflow-y: auto;
-            padding: 12px;
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            margin-bottom: 20px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #cbd5e1;
         }
 
-        .movies-grid:empty {
+        .progress-track {
+            width: 120px;
+            height: 6px;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 999px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #34d399, #818cf8);
+            border-radius: 999px;
+            transition: width 0.5s linear;
+        }
+
+        /* Collapsible Queue Drawer */
+        .queue-drawer {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #334155;
             display: none;
         }
 
+        .queue-drawer.open {
+            display: block;
+        }
+
+        .queue-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .queue-item {
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid #334155;
+            padding: 8px 12px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .queue-item-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .queue-pos {
+            background: #4f46e5;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            flex-shrink: 0;
+        }
+
+        .queue-nick {
+            font-weight: 600;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .queue-item-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .queue-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            flex-shrink: 0;
+        }
+
+        .empty-queue {
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
+            padding: 8px 0;
+            font-style: italic;
+        }
+
+        /* Main Content Area */
+        .content-body {
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Segmented Control */
+        .segmented-control {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: #1e293b;
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+
+        .seg-btn {
+            padding: 10px 12px;
+            border-radius: 9px;
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .seg-btn:hover {
+            color: #f8fafc;
+        }
+
+        .seg-btn.active {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        }
+
+        /* Effects Grid */
         @keyframes shimmerBar {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
 
+        .movies-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            max-height: 360px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .movies-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .movies-grid::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        .movies-grid::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 999px;
+        }
+
         .movie-card {
             background: #1e293b;
             border: 2px solid #334155;
-            border-radius: 10px;
-            padding: 12px;
+            border-radius: 12px;
+            padding: 11px;
             cursor: pointer;
-            transition: all 0.25s;
+            transition: all 0.2s;
             display: flex;
             flex-direction: column;
             gap: 6px;
-            color: #f8fafc;
         }
 
         .movie-card:hover {
             border-color: #6366f1;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25);
+            transform: translateY(-1px);
         }
 
         .movie-card.selected {
             border-color: #818cf8;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.32) 0%, rgba(139, 92, 246, 0.32) 100%);
-            color: #ffffff;
-            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(139, 92, 246, 0.28) 100%);
+            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4), 0 6px 16px rgba(99, 102, 241, 0.2);
         }
 
         .movie-preview-bar {
-            height: 28px;
+            height: 24px;
             border-radius: 6px;
             background-size: 200% 200%;
             animation: shimmerBar 3.5s ease infinite;
@@ -215,9 +358,9 @@
 
         .movie-name {
             font-weight: 700;
-            font-size: 14px;
-            word-break: break-word;
+            font-size: 13px;
             color: #f8fafc;
+            line-height: 1.25;
         }
 
         .movie-desc {
@@ -230,246 +373,441 @@
             color: #e2e8f0;
         }
 
-        .queue-section {
-            background: #0f172a;
-            border: 1px solid #334155;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-
-        .queue-section h3 {
-            color: #e2e8f0;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
+        /* 1-Tap Color Swatches */
+        .swatches-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
         }
 
-        .current-display {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 15px;
+        @media (min-width: 480px) {
+            .swatches-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        .swatch-btn {
+            background: #1e293b;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 12px 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: #e2e8f0;
+        }
+
+        .swatch-btn:hover {
+            border-color: #6366f1;
+            transform: translateY(-1px);
+        }
+
+        .swatch-btn.selected {
+            border-color: #818cf8;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(139, 92, 246, 0.28) 100%);
+            box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4);
+        }
+
+        .swatch-circle {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+        }
+
+        .swatch-label {
+            font-size: 12px;
+            font-weight: 600;
             text-align: center;
-            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
         }
 
-        .current-display h4 {
-            margin-bottom: 10px;
-            font-size: 18px;
-        }
-
-        .current-display .time-remaining {
-            font-size: 32px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-
-        .current-display .user-info {
-            font-size: 16px;
-            opacity: 0.92;
-        }
-
-        .queue-list {
-            list-style: none;
-        }
-
-        .queue-item {
+        .custom-color-row {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             background: #1e293b;
             border: 1px solid #334155;
-            padding: 12px 15px;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-left: 4px solid #6366f1;
+            border-radius: 12px;
+            padding: 10px 14px;
         }
 
-        .queue-item .position {
-            background: #6366f1;
-            color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
+        .custom-color-left {
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 14px;
-        }
-
-        .queue-item .info {
-            flex: 1;
-            margin: 0 15px;
-        }
-
-        .queue-item .nickname {
-            font-weight: 600;
-            color: #f8fafc;
-        }
-
-        .queue-item .choice {
-            font-size: 12px;
-            color: #94a3b8;
-            margin-top: 3px;
-        }
-
-        .queue-item .color-preview {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            border: 2px solid #475569;
-        }
-
-        .empty-queue {
-            text-align: center;
-            color: #64748b;
-            padding: 20px;
-            font-style: italic;
-        }
-
-        .control-type-selector {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
             gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .control-type-btn {
-            padding: 15px;
-            border: 2px solid #334155;
-            background: #0f172a;
-            color: #cbd5e1;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-align: center;
+            font-size: 13px;
             font-weight: 600;
+            color: #cbd5e1;
         }
 
-        .control-type-btn:hover {
-            border-color: #6366f1;
+        input[type="color"] {
+            width: 44px;
+            height: 34px;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        /* Sticky Bottom Action Bar */
+        .bottom-bar {
+            background: rgba(30, 41, 59, 0.95);
+            border-top: 1px solid #334155;
+            padding: 14px 20px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .action-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nickname-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .nickname-input {
+            width: 100%;
+            padding: 10px 38px 10px 12px;
+            background: #0f172a;
             color: #f8fafc;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            font-size: 13px;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .control-type-btn.active {
+        .nickname-input::placeholder {
+            color: #64748b;
+        }
+
+        .nickname-input:focus {
+            outline: none;
             border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+        }
+
+        .dice-btn {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 7px;
+            padding: 4px 7px;
+            font-size: 13px;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .dice-btn:hover {
+            background: #334155;
+        }
+
+        .selection-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 9px 12px;
+            max-width: 195px;
+            flex-shrink: 0;
+        }
+
+        .selection-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            flex-shrink: 0;
+            background-size: 200% 200%;
+            animation: shimmerBar 3.5s ease infinite;
+        }
+
+        .selection-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: #e2e8f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #ffffff;
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: white;
-            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.5);
+        }
+
+        .status {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            display: none;
+            text-align: center;
+        }
+
+        .status.success {
+            background: rgba(16, 185, 129, 0.16);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+
+        .status.error {
+            background: rgba(239, 68, 68, 0.16);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+
+        .status.info {
+            background: rgba(56, 189, 248, 0.16);
+            color: #7dd3fc;
+            border: 1px solid rgba(56, 189, 248, 0.35);
         }
 
         .hidden {
-            display: none;
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎄 File d'Attente du Sapin</h1>
-        <p class="subtitle">Contrôlez les 2400 lumières à tour de rôle!</p>
-
-        <!-- Current Display & Queue Status -->
-        <div class="queue-section">
-            <h3>⏱️ En Cours</h3>
-            <div class="current-display" id="currentDisplay">
-                <div class="user-info">En attente du premier utilisateur...</div>
-            </div>
-            
-            <h3>File d'Attente (<span id="queueCount">0</span>)</h3>
-            <ul class="queue-list" id="queueList">
-                <li class="empty-queue">Personne dans la file</li>
-            </ul>
-        </div>
-
-        <!-- Join Queue Form -->
-        <div class="form-group">
-            <label for="nickname">Votre Surnom (Optionnel)</label>
-            <input type="text" id="nickname" placeholder="ex: Père Noël, Anonyme, etc." maxlength="20">
-        </div>
-
-        <div class="form-group">
-            <label>Choisissez le Type de Contrôle</label>
-            <div class="control-type-selector">
-                <div class="control-type-btn active" onclick="selectControlType('color')" id="colorTypeBtn">
-                   🎨 Couleur Unie
+    <div class="app-shell">
+        <!-- Compact Top Header & Live Status -->
+        <div class="top-bar">
+            <div class="header-row">
+                <div class="title-group">
+                    <h1>🎄 Sapin du Quartier</h1>
+                    <p class="subtitle">Contrôlez les 2400 lumières à tour de rôle!</p>
                 </div>
-                <div class="control-type-btn" onclick="selectControlType('effect')" id="effectTypeBtn">
-                    ✨ Effets Animés (22)
+                <button type="button" class="queue-toggle-btn" id="queueToggleBtn" onclick="toggleQueueDrawer()">
+                    👥 File (<span id="queueCount">0</span>) <span id="queueChevron">▼</span>
+                </button>
+            </div>
+
+            <div class="live-banner" id="currentDisplay">
+                <div class="live-row-top">
+                    <div class="live-indicator">
+                        <span class="pulse-dot idle" id="liveDot"></span>
+                        <span id="liveUserText">Sapin prêt — Choisissez un effet pour démarrer!</span>
+                    </div>
+                    <span class="live-timer" id="liveTimerText"></span>
+                </div>
+                <div class="live-row-bottom hidden" id="liveBottomRow">
+                    <span id="liveChoiceText"></span>
+                    <div class="progress-track">
+                        <div class="progress-fill" id="liveProgressFill" style="width: 100%;"></div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Color Selection -->
-        <div class="form-group" id="colorSection">
-            <label>Choisissez une Couleur</label>
-            <div class="color-picker-group">
-                <input type="color" id="colorPicker" value="#ff0000">
-                <span id="colorLabel" style="flex: 1; font-weight: 600;">Rouge</span>
+            <div class="queue-drawer" id="queueDrawer">
+                <ul class="queue-list" id="queueList">
+                    <li class="empty-queue">Personne dans la file d'attente</li>
+                </ul>
             </div>
         </div>
 
-        <!-- Effect Selection -->
-        <div class="form-group hidden" id="effectSection">
-            <label>Choisissez un Effet</label>
-            <div class="movies-grid" id="moviesGrid"></div>
+        <!-- Main Body -->
+        <div class="content-body">
+            <!-- Mode Segmented Switcher -->
+            <div class="segmented-control">
+                <button type="button" class="seg-btn active" id="effectTypeBtn" onclick="selectControlType('effect')">
+                    ✨ Effets Animés
+                </button>
+                <button type="button" class="seg-btn" id="colorTypeBtn" onclick="selectControlType('color')">
+                    🎨 Couleur Unie
+                </button>
+            </div>
+
+            <!-- Effects Grid -->
+            <div id="effectSection">
+                <div class="movies-grid" id="moviesGrid"></div>
+            </div>
+
+            <!-- 1-Tap Color Swatches -->
+            <div id="colorSection" class="hidden">
+                <div class="swatches-grid" id="swatchesGrid"></div>
+                <div class="custom-color-row">
+                    <div class="custom-color-left">
+                        <span>🎨 Autre couleur personnalisée</span>
+                        <span id="customHexLabel" style="color: #94a3b8; font-size: 12px;">#EF4444</span>
+                    </div>
+                    <input type="color" id="colorPicker" value="#ef4444">
+                </div>
+            </div>
         </div>
 
-        <button class="btn-primary btn-large" onclick="joinQueue()">
-           Rejoindre la File (2 min)
-        </button>
+        <!-- Sticky Bottom Action Bar -->
+        <div class="bottom-bar">
+            <div id="status" class="status"></div>
 
-        <div id="status" class="status"></div>
+            <div class="action-meta-row">
+                <div class="nickname-wrap">
+                    <input type="text" id="nickname" class="nickname-input" placeholder="Votre surnom (ex: Père Noël)" maxlength="20">
+                    <button type="button" class="dice-btn" onclick="pickRandomNickname()" title="Générer un surnom festif">🎲</button>
+                </div>
+                <div class="selection-pill" title="Votre sélection actuelle">
+                    <span class="selection-dot" id="selectionDot"></span>
+                    <span class="selection-name" id="selectionName">Chargement...</span>
+                </div>
+            </div>
+
+            <button type="button" class="btn-submit" onclick="joinQueue()">
+                🚀 Illuminer le Sapin (2 min)
+            </button>
+        </div>
     </div>
 
     <script>
         const API_BASE = '/api';
+
+        const PRESET_COLORS = [
+            { hex: '#ef4444', name: 'Rouge Noël' },
+            { hex: '#22c55e', name: 'Vert Sapin' },
+            { hex: '#f59e0b', name: 'Or Chaud' },
+            { hex: '#38bdf8', name: 'Bleu Glace' },
+            { hex: '#a855f7', name: 'Violet Royal' },
+            { hex: '#ec4899', name: 'Rose Festif' },
+            { hex: '#06b6d4', name: 'Turquoise' },
+            { hex: '#fffbeb', name: 'Blanc Chaud' }
+        ];
+
+        const FESTIVE_NICKNAMES = [
+            'Lutin Givré',
+            'Renne Étoilé',
+            'Père Noël',
+            'Flocon Magique',
+            'Bonhomme de Neige',
+            'Étoile du Nord',
+            'Sapin Enchanté',
+            'Ours Polaire',
+            'Clochette Dorée',
+            'Sucre d\'Orge'
+        ];
+
         let currentMovies = [];
         let selectedMovieId = null;
-        let controlType = 'color'; // 'color' or 'effect'
-        let queueUpdateInterval;
+        let selectedColor = PRESET_COLORS[0].hex;
+        let selectedColorName = PRESET_COLORS[0].name;
+        let controlType = 'effect'; // Default to effects
+        let queueDrawerOpen = false;
+        let statusTimeout = null;
 
         function showStatus(message, type) {
             const status = document.getElementById('status');
             status.textContent = message;
             status.className = `status ${type}`;
             status.style.display = 'block';
-            setTimeout(() => {
+            if (statusTimeout) clearTimeout(statusTimeout);
+            statusTimeout = setTimeout(() => {
                 status.style.display = 'none';
             }, 5000);
         }
 
+        function toggleQueueDrawer() {
+            queueDrawerOpen = !queueDrawerOpen;
+            document.getElementById('queueDrawer').classList.toggle('open', queueDrawerOpen);
+            document.getElementById('queueChevron').textContent = queueDrawerOpen ? '▲' : '▼';
+        }
+
+        function pickRandomNickname() {
+            const input = document.getElementById('nickname');
+            const current = input.value;
+            const choices = FESTIVE_NICKNAMES.filter(n => n !== current);
+            input.value = choices[Math.floor(Math.random() * choices.length)];
+        }
+
         function selectControlType(type) {
             controlType = type;
-            document.getElementById('colorTypeBtn').classList.toggle('active', type === 'color');
             document.getElementById('effectTypeBtn').classList.toggle('active', type === 'effect');
-            document.getElementById('colorSection').classList.toggle('hidden', type !== 'color');
+            document.getElementById('colorTypeBtn').classList.toggle('active', type === 'color');
             document.getElementById('effectSection').classList.toggle('hidden', type !== 'effect');
+            document.getElementById('colorSection').classList.toggle('hidden', type !== 'color');
+            updateSelectionSummary();
+        }
 
-            if (type === 'effect' && currentMovies.length === 0) {
-                loadMovies();
-            }
+        function renderColorSwatches() {
+            const grid = document.getElementById('swatchesGrid');
+            grid.innerHTML = '';
+
+            PRESET_COLORS.forEach(item => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'swatch-btn' + (selectedColor.toLowerCase() === item.hex.toLowerCase() ? ' selected' : '');
+
+                const circle = document.createElement('span');
+                circle.className = 'swatch-circle';
+                circle.style.backgroundColor = item.hex;
+
+                const label = document.createElement('span');
+                label.className = 'swatch-label';
+                label.textContent = item.name;
+
+                btn.appendChild(circle);
+                btn.appendChild(label);
+                btn.onclick = () => {
+                    selectedColor = item.hex;
+                    selectedColorName = item.name;
+                    document.getElementById('colorPicker').value = item.hex;
+                    document.getElementById('customHexLabel').textContent = item.hex.toUpperCase();
+                    renderColorSwatches();
+                    updateSelectionSummary();
+                };
+                grid.appendChild(btn);
+            });
         }
 
         document.getElementById('colorPicker').addEventListener('input', (e) => {
-            const color = e.target.value;
-            const colorNames = {
-                '#ff0000': 'Rouge',
-                '#00ff00': 'Vert',
-                '#0000ff': 'Bleu',
-                '#ffff00': 'Jaune',
-                '#ff00ff': 'Magenta',
-                '#00ffff': 'Cyan',
-                '#ffffff': 'Blanc',
-                '#000000': 'Noir',
-                '#ffa500': 'Orange',
-                '#800080': 'Violet'
-            };
-            document.getElementById('colorLabel').textContent = colorNames[color.toLowerCase()] || color.toUpperCase();
+            selectedColor = e.target.value;
+            const match = PRESET_COLORS.find(c => c.hex.toLowerCase() === selectedColor.toLowerCase());
+            selectedColorName = match ? match.name : selectedColor.toUpperCase();
+            document.getElementById('customHexLabel').textContent = selectedColor.toUpperCase();
+            renderColorSwatches();
+            updateSelectionSummary();
         });
+
+        function updateSelectionSummary() {
+            const dot = document.getElementById('selectionDot');
+            const nameEl = document.getElementById('selectionName');
+
+            if (controlType === 'color') {
+                dot.style.backgroundImage = 'none';
+                dot.style.backgroundColor = selectedColor;
+                nameEl.textContent = selectedColorName;
+            } else {
+                const movie = currentMovies.find(m => m.id === selectedMovieId);
+                dot.style.backgroundColor = 'transparent';
+                dot.style.backgroundImage = (movie && movie.preview) || 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)';
+                nameEl.textContent = movie ? movie.name : 'Choisir un effet';
+            }
+        }
 
         async function loadMovies() {
             try {
@@ -484,6 +822,7 @@
                     selectedMovieId = currentMovies[0].id;
                 }
                 displayMovies();
+                updateSelectionSummary();
             } catch (error) {
                 showStatus('Erreur lors du chargement des effets: ' + error.message, 'error');
             }
@@ -495,10 +834,7 @@
 
             currentMovies.forEach((movie, index) => {
                 const card = document.createElement('div');
-                card.className = 'movie-card';
-                if (movie.id === selectedMovieId) {
-                    card.classList.add('selected');
-                }
+                card.className = 'movie-card' + (movie.id === selectedMovieId ? ' selected' : '');
 
                 const previewEl = document.createElement('div');
                 previewEl.className = 'movie-preview-bar';
@@ -526,47 +862,47 @@
         function selectMovie(movieId) {
             selectedMovieId = movieId;
             displayMovies();
+            updateSelectionSummary();
         }
 
         async function joinQueue() {
             const nickname = document.getElementById('nickname').value.trim() || 'Anonyme';
-            
+
             if (controlType === 'effect' && selectedMovieId === null) {
                 showStatus('Veuillez d\'abord sélectionner un effet!', 'error');
                 return;
             }
-            
-            showStatus('Rejoindre la file...', 'info');
-            
+
+            showStatus('Ajout à la file en cours...', 'info');
+
             try {
                 const payload = {
-                    nickname: nickname,
+                    nickname,
                     type: controlType
                 };
-                
+
                 if (controlType === 'color') {
-                    const color = document.getElementById('colorPicker').value;
-                    payload.color = color;
+                    payload.color = selectedColor;
                 } else {
                     payload.movieId = selectedMovieId;
                 }
-                
+
                 const response = await fetch(`${API_BASE}/queue/join`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || `Erreur HTTP! statut: ${response.status}`);
                 }
-                
+
                 const data = await response.json();
-                showStatus(`Vous êtes dans la file! Position: ${data.position}`, 'success');
+                showStatus(`✅ C'est parti ! Vous êtes en position #${data.position}`, 'success');
                 updateQueue();
             } catch (error) {
-                showStatus('Erreur: ' + error.message, 'error');
+                showStatus(error.message, 'error');
             }
         }
 
@@ -574,93 +910,103 @@
             try {
                 const response = await fetch(`${API_BASE}/queue/status`);
                 if (!response.ok) return;
-                
+
                 const data = await response.json();
-                
-                const currentDisplay = document.getElementById('currentDisplay');
-                currentDisplay.innerHTML = '';
+
+                const liveDot = document.getElementById('liveDot');
+                const liveUserText = document.getElementById('liveUserText');
+                const liveTimerText = document.getElementById('liveTimerText');
+                const liveBottomRow = document.getElementById('liveBottomRow');
+                const liveChoiceText = document.getElementById('liveChoiceText');
+                const liveProgressFill = document.getElementById('liveProgressFill');
+
                 if (data.current) {
                     const timeLeft = Math.max(0, Math.ceil(data.current.timeRemaining / 1000));
                     const minutes = Math.floor(timeLeft / 60);
                     const seconds = timeLeft % 60;
-                    
+                    const pct = Math.max(0, Math.min(100, (data.current.timeRemaining / 120000) * 100));
+
+                    liveDot.className = 'pulse-dot';
+                    liveUserText.textContent = '';
+                    const prefix = document.createTextNode('En cours : ');
+                    const strong = document.createElement('strong');
+                    strong.textContent = data.current.nickname;
+                    liveUserText.appendChild(prefix);
+                    liveUserText.appendChild(strong);
+
+                    liveTimerText.textContent = `${minutes}:${seconds.toString().padStart(2, '0')} restant`;
+
                     let choiceText = '';
                     if (data.current.type === 'color') {
-                        choiceText = `Couleur: ${data.current.color}`;
+                        const match = PRESET_COLORS.find(c => c.hex.toLowerCase() === String(data.current.color).toLowerCase());
+                        choiceText = `🎨 Couleur : ${match ? match.name : data.current.color}`;
                     } else {
                         const movie = currentMovies.find(m => m.id === data.current.movieId);
-                        choiceText = `Effet: ${data.current.movieName || (movie ? movie.name : 'Effet ' + data.current.movieId)}`;
+                        choiceText = `✨ ${data.current.movieName || (movie ? movie.name : 'Effet ' + data.current.movieId)}`;
                     }
-                    
-                    const titleEl = document.createElement('h4');
-                    titleEl.textContent = data.current.nickname;
-                    
-                    const timeEl = document.createElement('div');
-                    timeEl.className = 'time-remaining';
-                    timeEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                    
-                    const infoEl = document.createElement('div');
-                    infoEl.className = 'user-info';
-                    infoEl.textContent = choiceText;
-                    
-                    currentDisplay.appendChild(titleEl);
-                    currentDisplay.appendChild(timeEl);
-                    currentDisplay.appendChild(infoEl);
+                    liveChoiceText.textContent = choiceText;
+                    liveProgressFill.style.width = `${pct}%`;
+                    liveBottomRow.classList.remove('hidden');
                 } else {
-                    const emptyInfoEl = document.createElement('div');
-                    emptyInfoEl.className = 'user-info';
-                    emptyInfoEl.textContent = 'En attente du premier utilisateur...';
-                    currentDisplay.appendChild(emptyInfoEl);
+                    liveDot.className = 'pulse-dot idle';
+                    liveUserText.textContent = 'Sapin libre — Votre tour démarre immédiatement !';
+                    liveTimerText.textContent = '';
+                    liveBottomRow.classList.add('hidden');
                 }
-                
+
                 const queueList = document.getElementById('queueList');
                 const queueCount = document.getElementById('queueCount');
                 queueCount.textContent = data.queue.length;
                 queueList.innerHTML = '';
-                
+
                 if (data.queue.length === 0) {
                     const emptyItem = document.createElement('li');
                     emptyItem.className = 'empty-queue';
-                    emptyItem.textContent = 'Personne dans la file';
+                    emptyItem.textContent = 'Personne dans la file d\'attente';
                     queueList.appendChild(emptyItem);
                 } else {
                     data.queue.forEach((item, index) => {
                         const li = document.createElement('li');
                         li.className = 'queue-item';
-                        
-                        const posEl = document.createElement('div');
-                        posEl.className = 'position';
-                        posEl.textContent = String(index + 1);
-                        
-                        const infoEl = document.createElement('div');
-                        infoEl.className = 'info';
-                        
-                        const nickEl = document.createElement('div');
-                        nickEl.className = 'nickname';
+
+                        const leftEl = document.createElement('div');
+                        leftEl.className = 'queue-item-left';
+
+                        const posEl = document.createElement('span');
+                        posEl.className = 'queue-pos';
+                        posEl.textContent = `#${index + 1}`;
+
+                        const nickEl = document.createElement('span');
+                        nickEl.className = 'queue-nick';
                         nickEl.textContent = item.nickname;
-                        
-                        const choiceEl = document.createElement('div');
-                        choiceEl.className = 'choice';
-                        
-                        const previewEl = document.createElement('div');
-                        previewEl.className = 'color-preview';
-                        
+
+                        leftEl.appendChild(posEl);
+                        leftEl.appendChild(nickEl);
+
+                        const rightEl = document.createElement('div');
+                        rightEl.className = 'queue-item-right';
+
+                        const choiceEl = document.createElement('span');
+                        const dotEl = document.createElement('span');
+                        dotEl.className = 'queue-dot';
+
                         if (item.type === 'color') {
-                            choiceEl.textContent = 'Couleur Unie';
+                            const match = PRESET_COLORS.find(c => c.hex.toLowerCase() === String(item.color).toLowerCase());
+                            choiceEl.textContent = match ? match.name : 'Couleur Unie';
                             if (/^#[0-9a-fA-F]{6}$/.test(item.color)) {
-                                previewEl.style.backgroundColor = item.color;
+                                dotEl.style.backgroundColor = item.color;
                             }
                         } else {
                             const movie = currentMovies.find(m => m.id === item.movieId);
                             choiceEl.textContent = item.movieName || (movie ? movie.name : `Effet ${item.movieId}`);
-                            previewEl.style.backgroundImage = (movie && movie.preview) || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                            dotEl.style.backgroundImage = (movie && movie.preview) || 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)';
                         }
-                        
-                        infoEl.appendChild(nickEl);
-                        infoEl.appendChild(choiceEl);
-                        li.appendChild(posEl);
-                        li.appendChild(infoEl);
-                        li.appendChild(previewEl);
+
+                        rightEl.appendChild(choiceEl);
+                        rightEl.appendChild(dotEl);
+
+                        li.appendChild(leftEl);
+                        li.appendChild(rightEl);
                         queueList.appendChild(li);
                     });
                 }
@@ -669,9 +1015,10 @@
             }
         }
 
-        queueUpdateInterval = setInterval(updateQueue, 1000);
+        renderColorSwatches();
         loadMovies();
         updateQueue();
+        setInterval(updateQueue, 1000);
     </script>
 </body>
 </html>
