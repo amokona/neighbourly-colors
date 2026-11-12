@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration & Statistiques - Sapin Twinkly</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            min-height: 100vh;
+            padding: 24px;
+            color: #1e293b;
+        }
+
+        .dashboard {
+            max-width: 1150px;
+            margin: 0 auto;
+        }
+
+        .topbar {
+            background: white;
+            border-radius: 16px;
+            padding: 20px 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .topbar h1 {
+            font-size: 22px;
+            color: #1e293b;
+        }
+
+        .topbar .subtitle {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        .auth-box {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .auth-box input {
+            padding: 9px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 210px;
+        }
+
+        .btn {
+            padding: 9px 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card .label {
+            font-size: 13px;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-top: 6px;
+        }
+
+        .stat-card .sub {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 860px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .panel h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #1e293b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .current-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .current-box .timer {
+            font-size: 26px;
+            font-weight: 700;
+        }
+
+        .queue-list {
+            list-style: none;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .queue-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+
+        .queue-item .meta {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .control-row {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .control-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .control-row label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+
+        .inline-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        input[type="range"] {
+            flex: 1;
+        }
+
+        input[type="color"] {
+            width: 48px;
+            height: 38px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .movies-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .movie-btn {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .movie-btn:hover {
+            border-color: #667eea;
+            background: #eef2ff;
+        }
+
+        .top-list {
+            list-style: none;
+        }
+
+        .top-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+        }
+
+        .swatch {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid #cbd5e1;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-info { background: #e0f2fe; color: #0369a1; }
+        .badge-success { background: #dcfce7; color: #15803d; }
+        .badge-error { background: #fee2e2; color: #b91c1c; }
+        .badge-warn { background: #fef3c7; color: #b45309; }
+
+        .logs-table-wrap {
+            max-height: 420px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+            position: sticky;
+            top: 0;
+        }
+
+        .alert-banner {
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .alert-banner.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .alert-banner.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="topbar">
+            <div>
+                <h1>🎄 Administration & Statistiques du Sapin</h1>
+                <div class="subtitle">Contrôle direct, gestion de la file d'attente et journal d'utilisation</div>
+            </div>
+            <div class="auth-box">
+                <input type="password" id="adminTokenInput" placeholder="Jeton ADMIN_TOKEN (si configuré)">
+                <button class="btn btn-primary" onclick="saveToken()">Connexion</button>
+                <a href="/" class="btn btn-secondary" style="text-decoration:none;">← Page Publique</a>
+            </div>
+        </div>
+
+        <div id="alertBanner" class="alert-banner"></div>
+
+        <!-- Statistics Summary Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Participations Totales</div>
+                <div class="value" id="statTotalTurns">0</div>
+                <div class="sub" id="statLast24h">0 dernières 24h</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Visiteurs Uniques (IP)</div>
+                <div class="value" id="statUniqueVisitors">0</div>
+                <div class="sub">Adresses IP distinctes</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Couleurs Unies</div>
+                <div class="value" id="statColorTurns">0</div>
+                <div class="sub" id="statColorPct">0% des choix</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Effets Animés</div>
+                <div class="value" id="statEffectTurns">0</div>
+                <div class="sub" id="statEffectPct">0% des choix</div>
+            </div>
+        </div>
+
+        <!-- Queue Management & Direct Tree Control -->
+        <div class="main-grid">
+            <div class="panel">
+                <h2>
+                    <span>⏱️ Gestion de la File d'Attente</span>
+                    <span class="badge badge-success" id="queueStateBadge">Active</span>
+                </h2>
+
+                <div class="current-box" id="adminCurrentBox">
+                    <div>
+                        <div style="font-weight:600; font-size:15px;" id="adminCurrentName">Aucun utilisateur actif</div>
+                        <div style="font-size:13px; opacity:0.9; margin-top:3px;" id="adminCurrentDetail">Le sapin est en mode par défaut</div>
+                    </div>
+                    <div class="timer" id="adminCurrentTimer">--:--</div>
+                </div>
+
+                <div class="inline-controls" style="margin-bottom:16px;">
+                    <button class="btn btn-warning" onclick="skipCurrentTurn()">⏭️ Passer le tour actuel</button>
+                    <button class="btn btn-secondary" id="pauseQueueBtn" onclick="togglePauseQueue()">⏸️ Mettre en pause</button>
+                    <button class="btn btn-danger" onclick="clearQueue()">🗑️ Vider la file</button>
+                </div>
+
+                <h3 style="font-size:14px; color:#475569; margin-bottom:8px;">En attente (<span id="adminQueueCount">0</span>)</h3>
+                <ul class="queue-list" id="adminQueueList">
+                    <li style="color:#94a3b8; font-style:italic; font-size:13px;">Personne dans la file</li>
+                </ul>
+            </div>
+
+            <div class="panel">
+                <h2>🎛️ Contrôle Direct du Sapin</h2>
+
+                <div class="control-row">
+                    <label>Alimentation / Mode</label>
+                    <div class="inline-controls">
+                        <button class="btn btn-success" onclick="setMode('movie')">Allumer (Mode Effet)</button>
+                        <button class="btn btn-primary" onclick="setMode('color')">Mode Couleur</button>
+                        <button class="btn btn-danger" onclick="setMode('off')">Éteindre le Sapin</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <label>Luminosité (<span id="brightnessVal">100</span>%)</label>
+                    <div class="inline-controls">
+                        <input type="range" id="brightnessSlider" min="0" max="100" value="100" oninput="document.getElementById('brightnessVal').textContent = this.value">
+                        <button class="btn btn-secondary" onclick="applyBrightness()">Appliquer</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <label>Forcer une Couleur Unie Immédiate</label>
+                    <div class="inline-controls">
+                        <input type="color" id="directColorPicker" value="#ff0000">
+                        <button class="btn btn-primary" onclick="applyDirectColor()">Appliquer la couleur</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <label>Forcer un Effet Immédiat</label>
+                    <div class="movies-mini-grid" id="adminMoviesGrid"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Effects & Top Colors -->
+        <div class="main-grid">
+            <div class="panel">
+                <h2>🏆 Effets les Plus Populaires</h2>
+                <ul class="top-list" id="topEffectsList">
+                    <li style="color:#94a3b8; font-size:13px;">Aucune donnée pour le moment</li>
+                </ul>
+            </div>
+            <div class="panel">
+                <h2>🎨 Couleurs les Plus Populaires</h2>
+                <ul class="top-list" id="topColorsList">
+                    <li style="color:#94a3b8; font-size:13px;">Aucune donnée pour le moment</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Activity & Usage Logs -->
+        <div class="panel">
+            <h2>
+                <span>📋 Journal d'Utilisation (Logs)</span>
+                <button class="btn btn-secondary" onclick="clearLogs()">Effacer le journal</button>
+            </h2>
+            <div class="logs-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date / Heure</th>
+                            <th>Événement</th>
+                            <th>Surnom</th>
+                            <th>Choix / Détails</th>
+                            <th>Adresse IP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr>
+                            <td colspan="5" style="text-align:center; color:#94a3b8;">Chargement...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let adminToken = localStorage.getItem('twinkly_admin_token') || '';
+        document.getElementById('adminTokenInput').value = adminToken;
+
+        function getHeaders(includeJson = false) {
+            const headers = {};
+            if (includeJson) headers['Content-Type'] = 'application/json';
+            if (adminToken) headers['x-admin-token'] = adminToken;
+            return headers;
+        }
+
+        function showAlert(msg, type = 'error') {
+            const el = document.getElementById('alertBanner');
+            el.textContent = msg;
+            el.className = `alert-banner ${type}`;
+            el.style.display = 'block';
+            if (type === 'success') {
+                setTimeout(() => { el.style.display = 'none'; }, 4000);
+            }
+        }
+
+        function saveToken() {
+            adminToken = document.getElementById('adminTokenInput').value.trim();
+            localStorage.setItem('twinkly_admin_token', adminToken);
+            showAlert('Jeton enregistré. Actualisation...', 'success');
+            loadAdminStats();
+            loadAdminMovies();
+        }
+
+        async function loadAdminMovies() {
+            try {
+                const res = await fetch(`${API_BASE}/movies`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const grid = document.getElementById('adminMoviesGrid');
+                grid.innerHTML = '';
+                (data.movies || []).forEach(movie => {
+                    const btn = document.createElement('button');
+                    btn.className = 'movie-btn';
+                    btn.textContent = `${movie.name} (#${movie.id})`;
+                    btn.onclick = () => applyDirectMovie(movie.id);
+                    grid.appendChild(btn);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function loadAdminStats() {
+            try {
+                const res = await fetch(`${API_BASE}/admin/stats`, {
+                    headers: getHeaders()
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    showAlert(err.error || `Erreur d'accès (${res.status})`, 'error');
+                    return;
+                }
+                const data = await res.json();
+                renderStats(data);
+            } catch (error) {
+                console.error('Failed to load admin stats:', error);
+            }
+        }
+
+        function renderStats(data) {
+            const { summary, topColors, topEffects, queueState, logs } = data;
+            document.getElementById('statTotalTurns').textContent = summary.totalTurns;
+            document.getElementById('statLast24h').textContent = `${summary.turnsLast24h} durant les dernières 24h`;
+            document.getElementById('statUniqueVisitors').textContent = summary.uniqueVisitors;
+            document.getElementById('statColorTurns').textContent = summary.colorTurns;
+            document.getElementById('statEffectTurns').textContent = summary.effectTurns;
+
+            const total = summary.totalTurns || 1;
+            document.getElementById('statColorPct').textContent = `${Math.round((summary.colorTurns / total) * 100)}% des choix`;
+            document.getElementById('statEffectPct').textContent = `${Math.round((summary.effectTurns / total) * 100)}% des choix`;
+
+            // Queue state
+            const badge = document.getElementById('queueStateBadge');
+            const pauseBtn = document.getElementById('pauseQueueBtn');
+            if (queueState.paused) {
+                badge.textContent = 'En Pause';
+                badge.className = 'badge badge-warn';
+                pauseBtn.textContent = '▶️ Réactiver la file';
+            } else {
+                badge.textContent = 'Active';
+                badge.className = 'badge badge-success';
+                pauseBtn.textContent = '⏸️ Mettre en pause';
+            }
+
+            if (queueState.current) {
+                const secs = Math.max(0, Math.ceil(queueState.current.timeRemaining / 1000));
+                const m = Math.floor(secs / 60);
+                const s = secs % 60;
+                document.getElementById('adminCurrentName').textContent = `${queueState.current.nickname} (${queueState.current.ip || 'IP inconnue'})`;
+                document.getElementById('adminCurrentDetail').textContent = queueState.current.type === 'color'
+                    ? `Couleur: ${queueState.current.color}`
+                    : `Effet: ${queueState.current.movieName || '#' + queueState.current.movieId}`;
+                document.getElementById('adminCurrentTimer').textContent = `${m}:${String(s).padStart(2, '0')}`;
+            } else {
+                document.getElementById('adminCurrentName').textContent = 'Aucun utilisateur actif';
+                document.getElementById('adminCurrentDetail').textContent = 'En attente dans la file...';
+                document.getElementById('adminCurrentTimer').textContent = '--:--';
+            }
+
+            // Waiting list
+            const qList = document.getElementById('adminQueueList');
+            document.getElementById('adminQueueCount').textContent = queueState.queue.length;
+            qList.innerHTML = '';
+            if (queueState.queue.length === 0) {
+                const li = document.createElement('li');
+                li.style.color = '#94a3b8';
+                li.style.fontStyle = 'italic';
+                li.style.fontSize = '13px';
+                li.textContent = 'Personne dans la file';
+                qList.appendChild(li);
+            } else {
+                queueState.queue.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'queue-item';
+
+                    const left = document.createElement('div');
+                    const title = document.createElement('div');
+                    title.style.fontWeight = '600';
+                    title.textContent = `#${item.position} ${item.nickname}`;
+
+                    const meta = document.createElement('div');
+                    meta.className = 'meta';
+                    const choice = item.type === 'color' ? `Couleur ${item.color}` : (item.movieName || `Effet #${item.movieId}`);
+                    meta.textContent = `${choice} • IP: ${item.ip || '-'}`;
+
+                    left.appendChild(title);
+                    left.appendChild(meta);
+
+                    const rmBtn = document.createElement('button');
+                    rmBtn.className = 'btn btn-danger';
+                    rmBtn.style.padding = '5px 10px';
+                    rmBtn.style.fontSize = '12px';
+                    rmBtn.textContent = 'Retirer';
+                    rmBtn.onclick = () => removeQueueItem(item.joinedAt);
+
+                    li.appendChild(left);
+                    li.appendChild(rmBtn);
+                    qList.appendChild(li);
+                });
+            }
+
+            // Top effects
+            const effList = document.getElementById('topEffectsList');
+            effList.innerHTML = '';
+            if (topEffects.length === 0) {
+                const li = document.createElement('li');
+                li.style.color = '#94a3b8';
+                li.style.fontSize = '13px';
+                li.textContent = 'Aucune donnée pour le moment';
+                effList.appendChild(li);
+            } else {
+                topEffects.forEach(eff => {
+                    const li = document.createElement('li');
+                    li.className = 'top-item';
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = `${eff.name} (ID #${eff.movieId})`;
+                    const countSpan = document.createElement('strong');
+                    countSpan.textContent = `${eff.count} fois`;
+                    li.appendChild(nameSpan);
+                    li.appendChild(countSpan);
+                    effList.appendChild(li);
+                });
+            }
+
+            // Top colors
+            const colList = document.getElementById('topColorsList');
+            colList.innerHTML = '';
+            if (topColors.length === 0) {
+                const li = document.createElement('li');
+                li.style.color = '#94a3b8';
+                li.style.fontSize = '13px';
+                li.textContent = 'Aucune donnée pour le moment';
+                colList.appendChild(li);
+            } else {
+                topColors.forEach(c => {
+                    const li = document.createElement('li');
+                    li.className = 'top-item';
+                    const left = document.createElement('span');
+                    const swatch = document.createElement('span');
+                    swatch.className = 'swatch';
+                    if (/^#[0-9a-fA-F]{6}$/.test(c.color)) {
+                        swatch.style.backgroundColor = c.color;
+                    }
+                    left.appendChild(swatch);
+                    left.appendChild(document.createTextNode(c.color.toUpperCase()));
+
+                    const countSpan = document.createElement('strong');
+                    countSpan.textContent = `${c.count} fois`;
+                    li.appendChild(left);
+                    li.appendChild(countSpan);
+                    colList.appendChild(li);
+                });
+            }
+
+            // Logs table
+            const tbody = document.getElementById('logsTableBody');
+            tbody.innerHTML = '';
+            if (!logs || logs.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 5;
+                td.style.textAlign = 'center';
+                td.style.color = '#94a3b8';
+                td.textContent = 'Aucune activité enregistrée';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            } else {
+                logs.forEach(log => {
+                    const tr = document.createElement('tr');
+
+                    const tdTime = document.createElement('td');
+                    tdTime.textContent = new Date(log.timestamp).toLocaleString('fr-CA');
+
+                    const tdEvent = document.createElement('td');
+                    const badgeEl = document.createElement('span');
+                    badgeEl.className = 'badge ' + (
+                        log.status === 'error' ? 'badge-error' :
+                        log.event === 'turn_started' ? 'badge-success' :
+                        log.event === 'admin_action' ? 'badge-warn' : 'badge-info'
+                    );
+                    badgeEl.textContent = log.event;
+                    tdEvent.appendChild(badgeEl);
+
+                    const tdNick = document.createElement('td');
+                    tdNick.style.fontWeight = '600';
+                    tdNick.textContent = log.nickname || '-';
+
+                    const tdDetails = document.createElement('td');
+                    if (log.color && /^#[0-9a-fA-F]{6}$/.test(log.color)) {
+                        const sw = document.createElement('span');
+                        sw.className = 'swatch';
+                        sw.style.backgroundColor = log.color;
+                        tdDetails.appendChild(sw);
+                    }
+                    const detailStr = log.details || (log.type === 'color' ? log.color : (log.movieName || ''));
+                    tdDetails.appendChild(document.createTextNode(detailStr));
+
+                    const tdIp = document.createElement('td');
+                    tdIp.style.fontFamily = 'monospace';
+                    tdIp.textContent = log.ip || '-';
+
+                    tr.appendChild(tdTime);
+                    tr.appendChild(tdEvent);
+                    tr.appendChild(tdNick);
+                    tr.appendChild(tdDetails);
+                    tr.appendChild(tdIp);
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        async function skipCurrentTurn() {
+            const res = await fetch(`${API_BASE}/admin/queue/skip`, { method: 'POST', headers: getHeaders() });
+            if (res.ok) {
+                showAlert('Tour actuel passé!', 'success');
+                loadAdminStats();
+            }
+        }
+
+        async function removeQueueItem(joinedAt) {
+            const res = await fetch(`${API_BASE}/admin/queue/remove`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ joinedAt })
+            });
+            if (res.ok) {
+                loadAdminStats();
+            }
+        }
+
+        async function clearQueue() {
+            const res = await fetch(`${API_BASE}/admin/queue/clear`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ stopCurrent: false })
+            });
+            if (res.ok) {
+                showAlert('File d\'attente vidée!', 'success');
+                loadAdminStats();
+            }
+        }
+
+        async function togglePauseQueue() {
+            const res = await fetch(`${API_BASE}/admin/queue/pause`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({})
+            });
+            if (res.ok) {
+                loadAdminStats();
+            }
+        }
+
+        async function clearLogs() {
+            const res = await fetch(`${API_BASE}/admin/logs/clear`, {
+                method: 'POST',
+                headers: getHeaders()
+            });
+            if (res.ok) {
+                showAlert('Journal effacé!', 'success');
+                loadAdminStats();
+            }
+        }
+
+        async function setMode(mode) {
+            const res = await fetch(`${API_BASE}/mode`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ mode })
+            });
+            if (res.ok) {
+                showAlert(`Mode changé: ${mode}`, 'success');
+                loadAdminStats();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                showAlert(err.error || 'Erreur lors du changement de mode');
+            }
+        }
+
+        async function applyBrightness() {
+            const brightness = Number(document.getElementById('brightnessSlider').value);
+            const res = await fetch(`${API_BASE}/brightness`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ brightness })
+            });
+            if (res.ok) {
+                showAlert(`Luminosité réglée à ${brightness}%`, 'success');
+                loadAdminStats();
+            }
+        }
+
+        async function applyDirectColor() {
+            const hex = document.getElementById('directColorPicker').value.slice(1);
+            const r = parseInt(hex.slice(0, 2), 16);
+            const g = parseInt(hex.slice(2, 4), 16);
+            const b = parseInt(hex.slice(4, 6), 16);
+            const res = await fetch(`${API_BASE}/color`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ r, g, b })
+            });
+            if (res.ok) {
+                showAlert(`Couleur directe appliquée (#${hex})`, 'success');
+                loadAdminStats();
+            }
+        }
+
+        async function applyDirectMovie(movieId) {
+            const res = await fetch(`${API_BASE}/current-movie`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ movie_id: movieId })
+            });
+            if (res.ok) {
+                showAlert(`Effet #${movieId} appliqué sur le sapin!`, 'success');
+                loadAdminStats();
+            }
+        }
+
+        loadAdminMovies();
+        loadAdminStats();
+        setInterval(loadAdminStats, 2000);
+    </script>
+</body>
+</html>

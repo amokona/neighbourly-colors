@@ -9,3 +9,5 @@ services:
       - TWINKLY_IP=${TWINKLY_IP:-fallback}
       - ADMIN_TOKEN=${ADMIN_TOKEN:-}
       - DEFAULT_MOVIE_ID=${DEFAULT_MOVIE_ID:-}
+    volumes:
+      - ./data:/app/data

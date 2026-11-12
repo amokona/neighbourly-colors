@@ -1,6 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getClient } from './client.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +17,89 @@ const DEFAULT_MOVIE_ID = process.env.DEFAULT_MOVIE_ID !== undefined && process.e
   : null;
 
 const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+const DATA_DIR = path.join(__dirname, 'data');
+const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
+const MAX_LOGS = 500;
+
+// Persistent usage stats & logs
+let usageData = {
+  startedAt: new Date().toISOString(),
+  totalTurns: 0,
+  colorTurns: 0,
+  effectTurns: 0,
+  colorCounts: {},
+  movieCounts: {},
+  uniqueIps: [],
+  logs: []
+};
+
+let knownMovies = {};
+
+function loadUsageData() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(USAGE_FILE)) {
+      const raw = fs.readFileSync(USAGE_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      usageData = {
+        ...usageData,
+        ...parsed,
+        colorCounts: parsed.colorCounts || {},
+        movieCounts: parsed.movieCounts || {},
+        uniqueIps: Array.isArray(parsed.uniqueIps) ? parsed.uniqueIps : [],
+        logs: Array.isArray(parsed.logs) ? parsed.logs : []
+      };
+    }
+  } catch (error) {
+    console.error('Error loading usage data:', error);
+  }
+}
+
+function saveUsageData() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(usageData, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving usage data:', error);
+  }
+}
+
+function addLogEntry(entry) {
+  const logItem = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    ...entry
+  };
+  usageData.logs.unshift(logItem);
+  if (usageData.logs.length > MAX_LOGS) {
+    usageData.logs.length = MAX_LOGS;
+  }
+  saveUsageData();
+  return logItem;
+}
+
+function recordQueueTurn({ nickname, type, color, movieId, ip }) {
+  usageData.totalTurns += 1;
+  if (ip && !usageData.uniqueIps.includes(ip)) {
+    usageData.uniqueIps.push(ip);
+  }
+  if (type === 'color' && color) {
+    usageData.colorTurns += 1;
+    const normalized = color.toLowerCase();
+    usageData.colorCounts[normalized] = (usageData.colorCounts[normalized] || 0) + 1;
+  } else if (type === 'effect' && movieId !== null && movieId !== undefined) {
+    usageData.effectTurns += 1;
+    const key = String(movieId);
+    usageData.movieCounts[key] = (usageData.movieCounts[key] || 0) + 1;
+  }
+  saveUsageData();
+}
+
+loadUsageData();
 
 // Trust first reverse proxy so req.ip reflects the real client IP safely
 app.set('trust proxy', 1);
@@ -20,13 +109,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Serve /admin cleanly
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // Log all requests for debugging
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
 
-// Middleware to protect direct device-control endpoints from public queue bypass
+// Middleware to protect direct device-control & admin endpoints
 function requireAdmin(req, res, next) {
   if (ADMIN_TOKEN) {
     const authHeader = req.headers.authorization || '';
@@ -35,30 +129,35 @@ function requireAdmin(req, res, next) {
     if (headerToken === ADMIN_TOKEN) {
       return next();
     }
-    return res.status(403).json({ error: 'Accès non autorisé' });
+    return res.status(401).json({ error: 'Jeton administrateur (ADMIN_TOKEN) requis ou invalide' });
   }
 
-  // If no ADMIN_TOKEN is configured, only allow direct control from localhost
+  // If no ADMIN_TOKEN is configured, allow direct LAN/local access (not forwarded via public reverse proxy)
   const isForwarded = Boolean(req.headers['x-forwarded-for']);
-  const remote = req.socket?.remoteAddress || '';
-  const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
-  if (!isForwarded && isLoopback) {
+  if (!isForwarded) {
     return next();
   }
 
-  return res.status(403).json({ error: 'Accès direct désactivé. Veuillez utiliser la file d\'attente.' });
+  return res.status(403).json({
+    error: 'Configurez ADMIN_TOKEN dans docker-compose.yml pour accéder à l\'administration via le domaine public, ou connectez-vous via l\'IP locale (:3000/admin).'
+  });
 }
 
 // Queue system
 let queue = [];
 let currentUser = null;
 let currentTimeout = null;
+let queuePaused = false;
 
 // Process next person in queue
 async function processNextInQueue() {
+  if (currentTimeout) {
+    clearTimeout(currentTimeout);
+    currentTimeout = null;
+  }
+
   if (queue.length === 0) {
     currentUser = null;
-    currentTimeout = null;
 
     if (DEFAULT_MOVIE_ID !== null && !Number.isNaN(DEFAULT_MOVIE_ID)) {
       try {
@@ -84,7 +183,6 @@ async function processNextInQueue() {
     const client = getClient(TWINKLY_IP);
 
     if (currentUser.type === 'color') {
-      // Convert hex to RGB
       const hex = currentUser.color.slice(1);
       const r = parseInt(hex.slice(0, 2), 16);
       const g = parseInt(hex.slice(2, 4), 16);
@@ -94,15 +192,35 @@ async function processNextInQueue() {
       await client.setLEDOperationMode({ mode: 'color' });
       await client.setLEDColor({ r, g, b });
     } else {
-      // Effect/movie
       await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
       await client.setCurrentMovie({ id: currentUser.movieId });
       await client.setLEDOperationMode({ mode: 'movie' });
     }
 
     console.log(`Applied ${currentUser.type} for ${currentUser.nickname}`);
+    addLogEntry({
+      event: 'turn_started',
+      nickname: currentUser.nickname,
+      ip: currentUser.ip,
+      type: currentUser.type,
+      color: currentUser.color,
+      movieId: currentUser.movieId,
+      movieName: currentUser.movieId !== null ? (knownMovies[currentUser.movieId] || `Effet #${currentUser.movieId}`) : null,
+      status: 'success',
+      details: 'Tour démarré sur le sapin (2 min)'
+    });
   } catch (error) {
     console.error('Error applying lights:', error);
+    addLogEntry({
+      event: 'error',
+      nickname: currentUser.nickname,
+      ip: currentUser.ip,
+      type: currentUser.type,
+      color: currentUser.color,
+      movieId: currentUser.movieId,
+      status: 'error',
+      details: `Erreur Twinkly: ${error.message}`
+    });
   }
 
   // Set timeout to process next user after 2 minutes
@@ -156,6 +274,15 @@ app.post('/api/mode', requireAdmin, async (req, res) => {
       await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
     }
 
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      type: 'mode',
+      status: 'success',
+      details: `Mode changé vers "${mode}"`
+    });
+
     res.json({ success: true, mode });
   } catch (error) {
     console.error('Error setting mode:', error);
@@ -172,15 +299,20 @@ app.post('/api/color', requireAdmin, async (req, res) => {
     }
 
     const client = getClient(TWINKLY_IP);
-
-    // Set brightness to 100%
     await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-
-    // Set mode to color
     await client.setLEDOperationMode({ mode: 'color' });
-
-    // Then set the color
     await client.setLEDColor({ r, g, b });
+
+    const hex = '#' + [r, g, b].map(v => Number(v).toString(16).padStart(2, '0')).join('');
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      type: 'color',
+      color: hex,
+      status: 'success',
+      details: `Couleur directe appliquée (${hex})`
+    });
 
     res.json({ success: true, color: { r, g, b } });
   } catch (error) {
@@ -197,9 +329,20 @@ app.post('/api/brightness', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Brightness required' });
     }
 
+    const value = Math.max(0, Math.min(100, Number(brightness)));
     const client = getClient(TWINKLY_IP);
-    await client.setLEDBrightness({ value: brightness, mode: 'enabled', type: 'A' });
-    res.json({ success: true, brightness });
+    await client.setLEDBrightness({ value, mode: 'enabled', type: 'A' });
+
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      type: 'brightness',
+      status: 'success',
+      details: `Luminosité réglée à ${value}%`
+    });
+
+    res.json({ success: true, brightness: value });
   } catch (error) {
     console.error('Error setting brightness:', error);
     res.status(500).json({ error: error.message });
@@ -234,8 +377,15 @@ app.get('/api/discover', requireAdmin, async (req, res) => {
 app.get('/api/movies', async (req, res) => {
   try {
     const client = getClient(TWINKLY_IP);
-    const movies = await client.getMovies();
-    res.json(movies);
+    const moviesData = await client.getMovies();
+    if (moviesData && Array.isArray(moviesData.movies)) {
+      moviesData.movies.forEach(m => {
+        if (m && m.id !== undefined) {
+          knownMovies[m.id] = m.name || `Effet #${m.id}`;
+        }
+      });
+    }
+    res.json(moviesData);
   } catch (error) {
     console.error('Error getting movies:', error);
     res.status(500).json({ error: error.message });
@@ -262,20 +412,181 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Movie ID required' });
     }
 
+    const parsedId = Number(movie_id);
     const client = getClient(TWINKLY_IP);
-
-    // Set brightness to 100%
     await client.setLEDBrightness({ value: 100, mode: 'enabled', type: 'A' });
-
-    // Set the movie
-    await client.setCurrentMovie({ id: movie_id });
-
-    // Set mode to movie so it plays
+    await client.setCurrentMovie({ id: parsedId });
     await client.setLEDOperationMode({ mode: 'movie' });
 
-    res.json({ success: true, movie_id });
+    const movieName = knownMovies[parsedId] || `Effet #${parsedId}`;
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      type: 'effect',
+      movieId: parsedId,
+      movieName,
+      status: 'success',
+      details: `Effet direct appliqué: ${movieName}`
+    });
+
+    res.json({ success: true, movie_id: parsedId });
   } catch (error) {
     console.error('Error setting current movie:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin statistics & management endpoints
+app.get('/api/admin/stats', requireAdmin, (req, res) => {
+  try {
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+
+    const turnsLast24h = usageData.logs.filter(
+      l => l.event === 'queue_join' && new Date(l.timestamp).getTime() >= oneDayAgo
+    ).length;
+
+    const topColors = Object.entries(usageData.colorCounts || {})
+      .map(([color, count]) => ({ color, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    const topEffects = Object.entries(usageData.movieCounts || {})
+      .map(([id, count]) => ({
+        movieId: Number(id),
+        name: knownMovies[id] || `Effet #${id}`,
+        count
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    let current = null;
+    if (currentUser) {
+      const elapsed = now - currentUser.startTime;
+      const remaining = Math.max(0, currentUser.duration - elapsed);
+      current = {
+        ...currentUser,
+        movieName: currentUser.movieId !== null ? (knownMovies[currentUser.movieId] || `Effet #${currentUser.movieId}`) : null,
+        timeRemaining: remaining
+      };
+    }
+
+    res.json({
+      summary: {
+        startedAt: usageData.startedAt,
+        totalTurns: usageData.totalTurns,
+        colorTurns: usageData.colorTurns,
+        effectTurns: usageData.effectTurns,
+        uniqueVisitors: (usageData.uniqueIps || []).length,
+        turnsLast24h
+      },
+      topColors,
+      topEffects,
+      queueState: {
+        paused: queuePaused,
+        current,
+        queue: queue.map((item, index) => ({
+          ...item,
+          position: index + 1,
+          movieName: item.movieId !== null ? (knownMovies[item.movieId] || `Effet #${item.movieId}`) : null
+        }))
+      },
+      logs: usageData.logs.slice(0, 150)
+    });
+  } catch (error) {
+    console.error('Error getting admin stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/queue/skip', requireAdmin, async (req, res) => {
+  try {
+    const skippedUser = currentUser ? currentUser.nickname : null;
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: skippedUser ? `Tour de "${skippedUser}" passé par l'admin` : 'Passage au suivant demandé'
+    });
+    await processNextInQueue();
+    res.json({ success: true, skipped: skippedUser });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/queue/remove', requireAdmin, (req, res) => {
+  try {
+    const { joinedAt } = req.body || {};
+    const index = queue.findIndex(item => item.joinedAt === Number(joinedAt));
+    if (index === -1) {
+      return res.status(404).json({ error: 'Élément introuvable dans la file' });
+    }
+    const [removed] = queue.splice(index, 1);
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: `"${removed.nickname}" retiré de la file d'attente`
+    });
+    res.json({ success: true, removed });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/queue/clear', requireAdmin, async (req, res) => {
+  try {
+    const count = queue.length;
+    queue = [];
+    if (req.body?.stopCurrent) {
+      await processNextInQueue();
+    }
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: `File d'attente vidée (${count} en attente supprimé(s))`
+    });
+    res.json({ success: true, cleared: count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/queue/pause', requireAdmin, (req, res) => {
+  try {
+    queuePaused = typeof req.body?.paused === 'boolean' ? req.body.paused : !queuePaused;
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: queuePaused ? 'File d\'attente mise en pause' : 'File d\'attente réactivée'
+    });
+    res.json({ success: true, paused: queuePaused });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/logs/clear', requireAdmin, (req, res) => {
+  try {
+    usageData.logs = [];
+    saveUsageData();
+    addLogEntry({
+      event: 'admin_action',
+      nickname: 'Admin',
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: 'Journal d\'activité effacé'
+    });
+    res.json({ success: true });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -283,6 +594,10 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
 // Queue endpoints
 app.post('/api/queue/join', async (req, res) => {
   try {
+    if (queuePaused) {
+      return res.status(403).json({ error: 'La file d\'attente est temporairement fermée par l\'administrateur.' });
+    }
+
     const { nickname, type, color, movieId } = req.body || {};
     const ip = req.ip || req.socket?.remoteAddress;
 
@@ -322,16 +637,30 @@ app.post('/api/queue/join', async (req, res) => {
       return res.status(400).json({ error: 'Vous contrôlez actuellement les lumières!' });
     }
 
+    const normalizedColor = type === 'color' ? color.toLowerCase() : null;
     const queueItem = {
       nickname: cleanNickname,
       type,
-      color: type === 'color' ? color.toLowerCase() : null,
+      color: normalizedColor,
       movieId: type === 'effect' ? parsedMovieId : null,
       ip,
       joinedAt: Date.now()
     };
 
     queue.push(queueItem);
+
+    recordQueueTurn(queueItem);
+    addLogEntry({
+      event: 'queue_join',
+      nickname: queueItem.nickname,
+      ip: queueItem.ip,
+      type: queueItem.type,
+      color: queueItem.color,
+      movieId: queueItem.movieId,
+      movieName: queueItem.movieId !== null ? (knownMovies[queueItem.movieId] || `Effet #${queueItem.movieId}`) : null,
+      status: 'info',
+      details: `A rejoint la file (position ${queue.length})`
+    });
 
     // If no one is currently playing, start immediately
     if (!currentUser) {
@@ -367,6 +696,7 @@ app.get('/api/queue/status', (req, res) => {
     }
 
     res.json({
+      paused: queuePaused,
       current,
       queue: queue.map(item => ({
         nickname: item.nickname,
@@ -384,14 +714,6 @@ app.get('/api/queue/status', (req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🎄 Serveur Twinkly en cours d'exécution sur http://localhost:${PORT}`);
+  console.log(`Tableau de bord Admin: http://localhost:${PORT}/admin`);
   console.log(`API disponible à http://localhost:${PORT}/api`);
-  console.log(`\nSystème de File d'Attente Actif!`);
-  console.log(`- Les utilisateurs peuvent rejoindre la file pour contrôler les lumières pendant 2 minutes`);
-  console.log(`- Chaque utilisateur est identifié par son adresse IP`);
-  console.log(`\nPoints d'accès publics:`);
-  console.log(`- GET  /api/health`);
-  console.log(`- GET  /api/movies`);
-  console.log(`- POST /api/queue/join (body: {nickname, type, color?, movieId?})`);
-  console.log(`- GET  /api/queue/status`);
-  console.log(`\nTestez le point d'accès de santé: http://localhost:${PORT}/api/health`);
 });
