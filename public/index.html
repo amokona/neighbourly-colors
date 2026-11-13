@@ -1022,12 +1022,51 @@
             document.getElementById('queueChevron').textContent = queueDrawerOpen ? '▲' : '▼';
         }
 
+        const NICKNAME_COOKIE = 'twinkly_nickname';
+
+        function getSavedNickname() {
+            const prefix = `${NICKNAME_COOKIE}=`;
+            const parts = document.cookie.split(';');
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (trimmed.startsWith(prefix)) {
+                    try {
+                        return decodeURIComponent(trimmed.slice(prefix.length)).slice(0, 20);
+                    } catch (_) {
+                        return '';
+                    }
+                }
+            }
+            return '';
+        }
+
+        function saveNicknameCookie(name) {
+            const clean = String(name || '').trim().slice(0, 20);
+            if (!clean) {
+                document.cookie = `${NICKNAME_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+                return;
+            }
+            document.cookie = `${NICKNAME_COOKIE}=${encodeURIComponent(clean)}; Path=/; Max-Age=7776000; SameSite=Lax`;
+        }
+
         function pickRandomNickname() {
             const input = document.getElementById('nickname');
             const current = input.value;
             const choices = FESTIVE_NICKNAMES.filter(n => n !== current);
             input.value = choices[Math.floor(Math.random() * choices.length)];
+            saveNicknameCookie(input.value);
         }
+
+        (function initNicknameFromCookie() {
+            const input = document.getElementById('nickname');
+            const saved = getSavedNickname();
+            if (saved && input) {
+                input.value = saved;
+            }
+            if (input) {
+                input.addEventListener('input', () => saveNicknameCookie(input.value));
+            }
+        })();
 
         function selectControlType(type) {
             controlType = type;
@@ -1711,7 +1750,11 @@
         }
 
         async function joinQueue() {
-            const nickname = document.getElementById('nickname').value.trim() || 'Anonyme';
+            const rawNick = document.getElementById('nickname').value.trim();
+            if (rawNick) {
+                saveNicknameCookie(rawNick);
+            }
+            const nickname = rawNick || 'Anonyme';
 
             let targetType = controlType === 'color' ? 'color' : 'effect';
             let targetMovieId = selectedMovieId;
