@@ -1125,6 +1125,8 @@
             twinkle: 'Scintillement ✨',
             pulse_heartbeat: 'Pulsation 💓',
             burst_fade: 'Éclat & Extinction 💥',
+            fill_spiral_up: 'Remplissage Spirale ↑',
+            fill_spiral_down: 'Remplissage Spirale ↓',
             static: 'Fixe 🎄'
         };
 
@@ -1507,6 +1509,16 @@
                 const [pr, pg, pb] = palette[cycleIndex % palette.length];
                 return [Math.round(pr * level), Math.round(pg * level), Math.round(pb * level)];
             }
+            if (pattern === 'fill_spiral_up' || pattern === 'fill_spiral_down') {
+                const progress = (t % cycleSeconds) / cycleSeconds;
+                const yDir = pattern === 'fill_spiral_up' ? (1 - v) : v;
+                const band = Math.min(rows - 1, Math.floor(yDir * rows));
+                const ledSpiralPos = (band + u) / rows;
+                if (ledSpiralPos <= progress) {
+                    return palette.length === 1 ? palette[0] : samplePalettePreview(palette, ledSpiralPos);
+                }
+                return [0, 0, 0];
+            }
             if (pattern === 'static') {
                 return palette.length === 1 ? palette[0] : samplePalettePreview(palette, v);
             }
@@ -1549,7 +1561,16 @@
                     break;
             }
 
-            let [r, g, b] = samplePalettePreview(palette, phase);
+            let r, g, b;
+            if (palette.length === 1) {
+                const wave = Math.sin(phase * Math.PI * 2) * 0.5 + 0.5;
+                const level = minBrightness + (1 - minBrightness) * wave;
+                r = Math.round(palette[0][0] * level);
+                g = Math.round(palette[0][1] * level);
+                b = Math.round(palette[0][2] * level);
+            } else {
+                [r, g, b] = samplePalettePreview(palette, phase);
+            }
             if (twinkle > 0.05) {
                 const seed = hash01Preview(i * 7.1 + 5.3);
                 const sp = Math.pow(Math.max(0, Math.sin(t * (3.5 + seed * 4) + seed * 20)), 8) * twinkle;

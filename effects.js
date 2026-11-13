@@ -218,6 +218,32 @@ function evaluateAiRecipe(recipe, led, t) {
     return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
   }
 
+  if (pattern === 'fill_spiral_up' || pattern === 'fill_spiral_down') {
+    const progress = (t % cycleSeconds) / cycleSeconds;
+    const turns = Math.max(3, Math.round(scale * 2.2));
+    const yDir = pattern === 'fill_spiral_up' ? y : (1 - y);
+    const band = Math.min(turns - 1, Math.floor(yDir * turns));
+    const ledSpiralPos = (band + angle) / turns;
+
+    if (ledSpiralPos <= progress) {
+      const [pr, pg, pb] = palette.length === 1
+        ? palette[0]
+        : samplePaletteRgb(palette, ledSpiralPos * scale, sharpness);
+      const distToHead = progress - ledSpiralPos;
+      const headGlow = distToHead < 0.04 ? (1 - distToHead / 0.04) : 0;
+      r = pr;
+      g = pg;
+      b = pb;
+      w = Math.round(headGlow * 140);
+      return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+    }
+    if (minBrightness > 0.01) {
+      const [pr, pg, pb] = palette[0];
+      return [0, Math.round(pr * minBrightness), Math.round(pg * minBrightness), Math.round(pb * minBrightness)];
+    }
+    return [0, 0, 0, 0];
+  }
+
   if (pattern === 'static') {
     const [pr, pg, pb] = palette.length === 1
       ? palette[0]
@@ -293,7 +319,15 @@ function evaluateAiRecipe(recipe, led, t) {
       break;
   }
 
-  [r, g, b] = samplePaletteRgb(palette, phase, sharpness);
+  if (palette.length === 1) {
+    const wave = Math.pow(Math.sin(phase * Math.PI * 2) * 0.5 + 0.5, sharpness > 0.5 ? 2.5 : 1.3);
+    const level = minBrightness + (1 - minBrightness) * wave;
+    r = Math.round(palette[0][0] * level);
+    g = Math.round(palette[0][1] * level);
+    b = Math.round(palette[0][2] * level);
+  } else {
+    [r, g, b] = samplePaletteRgb(palette, phase, sharpness);
+  }
 
   if (twinkle > 0.04) {
     const seed = hash01(index * 7.3 + 5.1);
