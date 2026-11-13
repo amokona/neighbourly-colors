@@ -471,6 +471,155 @@
             color: #166534;
             border: 1px solid #bbf7d0;
         }
+
+        .schedule-subcard {
+            padding: 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            margin-bottom: 12px;
+        }
+
+        .schedule-subcard:last-child {
+            margin-bottom: 0;
+        }
+
+        .schedule-subcard-title {
+            font-weight: 700;
+            font-size: 14px;
+            color: #1e293b;
+        }
+
+        .schedule-check-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            font-size: 14px;
+            color: #1e293b;
+            cursor: pointer;
+        }
+
+        /* Dark Mode */
+        body.dark {
+            background: linear-gradient(135deg, #0b1120 0%, #111827 100%);
+            color: #e2e8f0;
+            color-scheme: dark;
+        }
+
+        body.dark .login-card,
+        body.dark .topbar,
+        body.dark .stat-card,
+        body.dark .panel {
+            background: #1e293b;
+            border: 1px solid #334155;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        body.dark .login-card h1,
+        body.dark .topbar h1,
+        body.dark .stat-card .value,
+        body.dark .panel h2,
+        body.dark .schedule-subcard-title,
+        body.dark .schedule-check-label {
+            color: #f8fafc;
+        }
+
+        body.dark .login-card .subtitle,
+        body.dark .topbar .subtitle,
+        body.dark .stat-card .label,
+        body.dark .stat-card .sub,
+        body.dark .queue-item .meta {
+            color: #94a3b8;
+        }
+
+        body.dark .login-field label,
+        body.dark .control-row label {
+            color: #cbd5e1;
+        }
+
+        body.dark .login-field input,
+        body.dark .select-input,
+        body.dark input[type="time"],
+        body.dark input[type="text"],
+        body.dark input[type="password"],
+        body.dark input[type="number"] {
+            background: #0f172a;
+            color: #f8fafc;
+            border-color: #334155;
+        }
+
+        body.dark .btn-secondary {
+            background: #334155;
+            color: #e2e8f0;
+        }
+
+        body.dark .queue-item,
+        body.dark .movie-btn,
+        body.dark .playlist-chip,
+        body.dark .schedule-subcard {
+            background: #0f172a;
+            border-color: #334155;
+            color: #e2e8f0;
+        }
+
+        body.dark .movie-btn:hover {
+            background: #1e1b4b;
+            border-color: #818cf8;
+        }
+
+        body.dark .playlist-chip:hover {
+            border-color: #64748b;
+        }
+
+        body.dark .playlist-chip.selected {
+            background: #312e81;
+            border-color: #818cf8;
+            color: #e0e7ff;
+        }
+
+        body.dark .playlist-chip-check {
+            color: #a5b4fc;
+        }
+
+        body.dark .control-row,
+        body.dark .top-item,
+        body.dark th,
+        body.dark td {
+            border-color: #334155;
+        }
+
+        body.dark th {
+            background: #0f172a;
+            color: #cbd5e1;
+        }
+
+        body.dark .logs-table-wrap {
+            border-color: #334155;
+        }
+
+        body.dark .badge-info { background: #0c4a6e; color: #7dd3fc; }
+        body.dark .badge-success { background: #14532d; color: #86efac; }
+        body.dark .badge-error { background: #7f1d1d; color: #fca5a5; }
+        body.dark .badge-warn { background: #78350f; color: #fde68a; }
+
+        body.dark .login-error,
+        body.dark .alert-banner.error {
+            background: #450a0a;
+            color: #fecaca;
+            border-color: #7f1d1d;
+        }
+
+        body.dark .alert-banner.success {
+            background: #052e16;
+            color: #bbf7d0;
+            border-color: #166534;
+        }
+
+        body.dark .panel p,
+        body.dark #adminAiCreationsList li {
+            color: #94a3b8 !important;
+        }
     </style>
 </head>
 <body>
@@ -496,8 +645,9 @@
                 Se connecter
             </button>
 
-            <div style="text-align:center; margin-top:16px;">
+            <div style="text-align:center; margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
                 <a href="/" style="font-size:13px; color:#64748b; text-decoration:none;">← Retour à la page publique</a>
+                <button type="button" class="btn btn-secondary theme-toggle-btn" style="padding:6px 10px; font-size:12px;" onclick="toggleDarkMode()">🌙 Mode sombre</button>
             </div>
         </form>
     </div>
@@ -510,6 +660,7 @@
                 <div class="subtitle">Contrôle direct, gestion de la file d'attente et journal d'utilisation</div>
             </div>
             <div class="auth-box">
+                <button type="button" class="btn btn-secondary theme-toggle-btn" onclick="toggleDarkMode()">🌙 Mode sombre</button>
                 <a href="/" class="btn btn-secondary" style="text-decoration:none;">← Page Publique</a>
                 <button class="btn btn-danger" onclick="handleLogout()">Déconnexion</button>
             </div>
@@ -615,13 +766,13 @@
             </p>
 
             <!-- 1. Playlist / Tree Power Schedule -->
-            <div style="padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 12px;">
+            <div class="schedule-subcard">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">🔁 Playlist Automatique (Allumage &amp; Extinction du Sapin)</div>
+                    <div class="schedule-subcard-title">🔁 Playlist Automatique (Allumage &amp; Extinction du Sapin)</div>
                     <span class="badge badge-info" id="scheduleStatusBadge">Désactivé</span>
                 </div>
                 <div class="inline-controls" style="justify-content: space-between;">
-                    <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
+                    <label class="schedule-check-label">
                         <input type="checkbox" id="scheduleEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markScheduleDirty()">
                         Allumer et éteindre la playlist automatiquement
                     </label>
@@ -643,13 +794,13 @@
             </div>
 
             <!-- 2. Public Control Schedule -->
-            <div style="padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <div class="schedule-subcard">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">🙋 Contrôle Public des Lumières (File d'Attente Voisins)</div>
+                    <div class="schedule-subcard-title">🙋 Contrôle Public des Lumières (File d'Attente Voisins)</div>
                     <span class="badge badge-info" id="controlScheduleStatusBadge">Toujours ouvert</span>
                 </div>
                 <div class="inline-controls" style="justify-content: space-between;">
-                    <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
+                    <label class="schedule-check-label">
                         <input type="checkbox" id="controlScheduleEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markControlScheduleDirty()">
                         Limiter les heures où les voisins peuvent contrôler
                     </label>
@@ -1594,7 +1745,27 @@
             }
         }
 
+        function applyTheme(isDark) {
+            document.body.classList.toggle('dark', isDark);
+            document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+                btn.textContent = isDark ? '☀️ Mode clair' : '🌙 Mode sombre';
+            });
+        }
+
+        function initTheme() {
+            const saved = localStorage.getItem('twinklyAdminTheme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            applyTheme(saved ? saved === 'dark' : prefersDark);
+        }
+
+        function toggleDarkMode() {
+            const isDark = !document.body.classList.contains('dark');
+            localStorage.setItem('twinklyAdminTheme', isDark ? 'dark' : 'light');
+            applyTheme(isDark);
+        }
+
         // Check existing session on load
+        initTheme();
         loadAdminStats();
     </script>
 </body>
