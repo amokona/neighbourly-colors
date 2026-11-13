@@ -1133,7 +1133,9 @@
             card.classList.remove('hidden');
             document.getElementById('aiResultTitle').textContent = creation.name;
             document.getElementById('aiResultDesc').textContent = creation.description || `« ${creation.prompt} »`;
-            document.getElementById('aiResultBadge').textContent = creation.pinned ? '📌 Épinglé' : 'Prêt à jouer';
+            document.getElementById('aiResultBadge').textContent = creation.pinned
+                ? '📌 Épinglé'
+                : (creation.source === 'gemini' ? '✨ Gemini IA' : '⚡ Mode local');
 
             const r = creation.recipe || {};
             const tagsEl = document.getElementById('aiResultTags');

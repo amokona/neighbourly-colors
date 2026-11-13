@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getClient } from './client.js';
@@ -294,6 +295,40 @@ function generateFallbackRecipe(promptText = '') {
   }, promptText);
 }
 
+function postJsonHttpsIPv4(hostname, requestPath, payload, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const req = https.request(
+      {
+        hostname,
+        path: requestPath,
+        method: 'POST',
+        family: 4,
+        timeout: timeoutMs,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => {
+          raw += chunk;
+        });
+        res.on('end', () => {
+          resolve({ status: res.statusCode || 500, body: raw });
+        });
+      }
+    );
+    req.on('timeout', () => {
+      req.destroy(new Error(`HTTPS request timed out after ${timeoutMs}ms`));
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 async function generateEffectWithGeminiOrFallback(promptText) {
   const apiKey = (usageData.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) {
@@ -319,41 +354,41 @@ Convertis la description de l'utilisateur en un objet JSON strict avec les propr
 - "twinkle": Nombre entre 0.0 (aucun scintillement) et 1.0 (scintillement intense).
 - "sharpness": Nombre entre 0.0 (dégradé doux) et 0.9 (rayures franches et nettes).`;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
+  const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+
+  for (const model of modelsToTry) {
+    try {
+      const { status, body } = await postJsonHttpsIPv4(
+        'generativelanguage.googleapis.com',
+        `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
           systemInstruction: { parts: [{ text: systemInstruction }] },
           contents: [{ role: 'user', parts: [{ text: promptText }] }],
           generationConfig: {
             temperature: 0.6,
             responseMimeType: 'application/json'
           }
-        })
+        },
+        8000
+      );
+
+      if (status < 200 || status >= 300) {
+        console.warn(`Gemini model ${model} returned ${status}:`, body.slice(0, 200));
+        continue;
       }
-    );
-    clearTimeout(timeout);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`Gemini API returned ${response.status}:`, errText.slice(0, 200));
-      return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
+      const data = JSON.parse(body);
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const parsed = JSON.parse(rawText);
+      const result = Array.isArray(parsed) ? parsed[0] : parsed;
+      return { recipe: sanitizeAiRecipe(result, promptText), source: 'gemini' };
+    } catch (err) {
+      console.warn(`Gemini model ${model} failed:`, err.message);
     }
-
-    const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = JSON.parse(rawText);
-    return { recipe: sanitizeAiRecipe(parsed, promptText), source: 'gemini' };
-  } catch (err) {
-    console.warn('Gemini generation failed, using smart local parser:', err.message);
-    return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
   }
+
+  console.warn('All Gemini models failed, using smart local parser');
+  return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
 }
 
 let knownMovies = {
