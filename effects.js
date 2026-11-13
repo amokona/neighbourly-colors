@@ -1,4 +1,5 @@
 import dgram from 'node:dgram';
+import { compileAiShader } from './public/shader-engine.js';
 
 const FPS = 30; // Native Twinkly 30 FPS real-time streaming over UDP port 7777
 const UDP_PORT = 7777;
@@ -131,7 +132,15 @@ function hash01(n) {
 const aiRecipes = new Map();
 
 export function registerAiRecipe(id, recipe) {
-  aiRecipes.set(String(id), recipe);
+  let compiled = null;
+  if (recipe && typeof recipe.code === 'string' && recipe.code.trim()) {
+    try {
+      compiled = compileAiShader(recipe.code);
+    } catch (err) {
+      console.warn(`Failed to compile AI shader ${id}:`, err.message);
+    }
+  }
+  aiRecipes.set(String(id), { ...recipe, _compiled: compiled });
 }
 
 export function unregisterAiRecipe(id) {
@@ -171,7 +180,14 @@ function samplePaletteRgb(palette, phase, sharpness = 0) {
 }
 
 function evaluateAiRecipe(recipe, led, t) {
-  const { y, angle, index } = led;
+  const { x, y, z, angle, index } = led;
+  if (typeof recipe._compiled === 'function') {
+    try {
+      return recipe._compiled(x, y, z, angle, index, 2400, t);
+    } catch (_) {
+      return [0, 0, 0, 0];
+    }
+  }
   const palette = Array.isArray(recipe.palette) && recipe.palette.length > 0
     ? recipe.palette
     : [[99, 102, 241], [236, 72, 153], [250, 204, 21]];

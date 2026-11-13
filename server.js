@@ -15,6 +15,7 @@ import {
   getAiRecipe,
   effectRunner
 } from './effects.js';
+import { compileAiShader } from './public/shader-engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -158,6 +159,7 @@ let usageData = {
 };
 
 const VALID_AI_PATTERNS = new Set([
+  'shader',
   'diagonal_45_up',
   'diagonal_45_down',
   'downward_wave',
@@ -222,10 +224,21 @@ function sanitizeAiRecipe(raw, fallbackPrompt = '') {
     palette = [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
   }
 
+  let validatedCode = null;
+  if (typeof raw?.code === 'string' && raw.code.trim()) {
+    try {
+      compileAiShader(raw.code);
+      validatedCode = raw.code.trim();
+    } catch (err) {
+      console.warn('AI shader failed sandbox validation, falling back to pattern:', err.message);
+    }
+  }
+
   return {
     name,
     description,
-    pattern,
+    pattern: validatedCode ? 'shader' : (pattern === 'shader' ? 'diagonal_45_up' : pattern),
+    code: validatedCode,
     speed: Math.round(speed * 100) / 100,
     scale: Math.round(scale * 100) / 100,
     twinkle: Math.round(twinkle * 100) / 100,
@@ -349,31 +362,24 @@ async function generateEffectWithGeminiOrFallback(promptText) {
     return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
   }
 
-  const systemInstruction = `Tu es un designer d'effets lumineux 3D pour un sapin de Noël Twinkly de 2400 LEDs.
+  const systemInstruction = `Tu es un artiste programmeur d'effets lumineux 3D pour un sapin de Noël Twinkly de 2400 LEDs (30 FPS).
 Convertis la description de l'utilisateur en un objet JSON strict avec les propriétés suivantes :
-- "name": Titre court et accrocheur en français commençant par un emoji (max 32 caractères, ex: "🏒 Tricolore Glorieux", "🌋 Lave Volcanique").
+- "name": Titre court et accrocheur en français commençant par un emoji (max 32 caractères).
 - "description": Courte phrase descriptive en français (max 95 caractères).
-- "pattern": Choisis exactement l'un de :
-  - "diagonal_45_up" (rayures ou bandes diagonales montant à 45 degrés)
-  - "diagonal_45_down" (rayures ou bandes diagonales descendant à 45 degrés)
-  - "downward_wave" (vagues ou couleurs voyageant du haut vers le bas)
-  - "upward_wave" (vagues ou flammes montant du bas vers le haut)
-  - "right_to_left" (couleurs tournant de droite à gauche)
-  - "left_to_right" (couleurs tournant de gauche à droite)
-  - "twinkle" (scintillement d'étoiles sur tout le sapin)
-  - "pulse_heartbeat" (pulsation rythmique sur tout le sapin)
-  - "burst_fade" (tout le sapin s'allume d'un coup, puis s'éteint progressivement jusqu'au noir complet, idéal pour éclats/flashs/respirations qui s'éteignent)
-  - "fill_spiral_up" (le sapin commence éteint et se remplit progressivement en spirale du bas vers le haut sur cycleSeconds secondes)
-  - "fill_spiral_down" (le sapin commence éteint et se remplit progressivement en spirale du haut vers le bas sur cycleSeconds secondes)
-  - "static" (tout le sapin reste fixe sans défiler)
-- "palette": Tableau de 1 à 5 couleurs au format [R, G, B] (entiers de 0 à 255) correspondant exactement aux couleurs demandées (ne rajoute pas de blanc si une seule couleur est demandée).
-- "speed": Nombre entre 0.5 (très lent) et 2.4 (très rapide), défaut 1.3.
-- "scale": Nombre entre 1.2 (larges vagues) et 4.5 (rayures serrées), défaut 2.6.
-- "twinkle": Nombre entre 0.0 (aucun scintillement) et 1.0 (scintillement intense).
-- "sharpness": Nombre entre 0.0 (dégradé doux) et 0.9 (rayures franches et nettes).
-- "cycleSeconds": Durée totale d'un cycle en secondes (1.0 à 30.0) pour "burst_fade", "fill_spiral_up" ou "fill_spiral_down" (ex: "15 secondes pour arriver haut" -> 15).
-- "fadeSeconds": Durée de l'extinction en secondes (0.2 à cycleSeconds) pour "burst_fade" (ex: "takes 7 seconds to die down" -> 7).
-- "minBrightness": Luminosité minimale entre 0.0 (extinction complète / noir total) et 0.8 (lueur résiduelle). Utilise 0.0 si l'utilisateur demande d'éteindre, de commencer éteint, ou de disparaître.`;
+- "code": Corps d'une fonction shader JavaScript pure (max 900 caractères) qui retourne [r, g, b] (ou [w, r, g, b]) avec des valeurs entre 0 et 255 pour UNE LED à l'instant t.
+  Variables disponibles pour chaque LED :
+  - x, z : position horizontale dans [-1, 1] (x < 0 gauche, x > 0 droite, z > 0 avant)
+  - y : hauteur sur le sapin dans [0, 1] (0 = tout en bas, 1 = sommet)
+  - angle : angle horizontal autour du sapin dans [0, 1)
+  - index : numéro de la LED (0..2399), total : 2400
+  - t : temps écoulé en secondes (continu, 30 FPS)
+  Fonctions mathématiques disponibles directement (NE PAS écrire Math. devant !) :
+  PI, TAU, sin, cos, tan, abs, sqrt, pow, exp, min, max, floor, ceil, round, sign, mod(a,b), fract(v), clamp(v,lo,hi), step(edge,v), smoothstep(e0,e1,v), mix(a,b,k), hash(n), hsv(h,s,v) -> [r,g,b], rgb(r,g,b) -> [r,g,b].
+  RÈGLES STRICTES POUR "code" :
+  - AUCUNE boucle (for, while, do), AUCUNE chaîne de caractères, AUCUN point (.) sauf pour les nombres décimaux (0.5), AUCUN accès par crochets obj[k] (mais const [r,g,b] = hsv(...) et return [r,g,b] sont autorisés).
+  - Utilise const / let pour tes calculs intermédiaires et termine par return [r, g, b]; (0 = éteint, 255 = max).
+  - Sois créatif pour reproduire EXACTEMENT les timings, zones (haut/bas/gauche/droite), explosions, spirales, scintillements ou transitions demandés !
+- "palette": Tableau de 1 à 5 couleurs [R, G, B] représentatives de l'effet (pour l'affichage).`;
 
   const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
 

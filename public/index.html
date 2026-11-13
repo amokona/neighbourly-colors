@@ -964,6 +964,10 @@
         </div>
     </div>
 
+    <script type="module">
+        import { compileAiShader } from '/shader-engine.js';
+        window.compileAiShader = compileAiShader;
+    </script>
     <script>
         const API_BASE = '/api';
 
@@ -1127,6 +1131,7 @@
             burst_fade: 'Éclat & Extinction 💥',
             fill_spiral_up: 'Remplissage Spirale ↑',
             fill_spiral_down: 'Remplissage Spirale ↓',
+            shader: 'Shader 3D IA 🪄',
             static: 'Fixe 🎄'
         };
 
@@ -1483,6 +1488,25 @@
             const v = row / Math.max(1, rows - 1);
             const upRow = (rows - 1) - row;
             const i = row * cols + col;
+
+            if (recipe && typeof recipe.code === 'string' && recipe.code.trim() && window.compileAiShader) {
+                if (!recipe._compiledPreview && !recipe._compileFailed) {
+                    try {
+                        recipe._compiledPreview = window.compileAiShader(recipe.code);
+                    } catch (_) {
+                        recipe._compileFailed = true;
+                    }
+                }
+                if (typeof recipe._compiledPreview === 'function') {
+                    try {
+                        const x = (u - 0.5) * 2;
+                        const y = 1 - v;
+                        const z = 0;
+                        const [, r, g, b] = recipe._compiledPreview(x, y, z, u, i, cols * rows, t);
+                        return [r, g, b];
+                    } catch (_) {}
+                }
+            }
             const palette = (recipe && Array.isArray(recipe.palette) && recipe.palette.length > 0)
                 ? recipe.palette
                 : [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
