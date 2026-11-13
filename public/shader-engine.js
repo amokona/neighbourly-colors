@@ -5,8 +5,7 @@ const FORBIDDEN_PATTERNS = [
   /['"`]/,                          // No string or template literals
   /[a-zA-Z_$]\s*\./,                // No property access (obj.prop)
   /\.\s*[a-zA-Z_$]/,                // No property access (.prop)
-  /[a-zA-Z0-9_$)\]]\s*\[/,          // No bracket indexing (obj[key])
-  /\b(while|for|do|function|class|new|import|export|eval|Function|this|super|global|globalThis|window|self|document|process|require|module|exports|fetch|try|catch|throw|async|await|yield|with|delete|typeof|instanceof|in)\b/,
+  /\b(while|for|do|function|class|new|import|export|eval|Function|constructor|prototype|__proto__|this|super|global|globalThis|window|self|document|process|require|module|exports|fetch|try|catch|throw|async|await|yield|with|delete|typeof|instanceof|in)\b/,
   /=>/                              // No arrow functions
 ];
 
