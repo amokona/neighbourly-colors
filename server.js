@@ -374,7 +374,7 @@ Convertis la description de l'utilisateur en un objet JSON strict avec les propr
   - index : numéro de la LED (0..2399), total : 2400
   - t : temps écoulé en secondes (continu, 30 FPS)
   Fonctions mathématiques disponibles directement (NE PAS écrire Math. devant !) :
-  PI, TAU, sin, cos, tan, abs, sqrt, pow, exp, min, max, floor, ceil, round, sign, mod(a,b), fract(v), clamp(v,lo,hi), step(edge,v), smoothstep(e0,e1,v), mix(a,b,k), hash(n), hsv(h,s,v) -> [r,g,b], rgb(r,g,b) -> [r,g,b].
+  PI, TAU, sin, cos, tan, abs, sqrt, pow, exp, min, max, floor, ceil, round, sign, mod(a,b), fract(v), clamp(v,lo,hi), step(edge,v), smoothstep(e0,e1,v), mix(a,b,k), hash(n), hsv(h,s,v) (h,s,v dans [0,1] -> retourne [r,g,b] dans [0,255]), rgb(r,g,b) (dans [0,255]).
   RÈGLES STRICTES POUR "code" :
   - AUCUNE boucle (for, while, do), AUCUNE chaîne de caractères, AUCUN point (.) sauf pour les nombres décimaux (0.5), AUCUN accès par crochets obj[k] (mais const [r,g,b] = hsv(...) et return [r,g,b] sont autorisés).
   - Utilise const / let pour tes calculs intermédiaires et termine par return [r, g, b]; (0 = éteint, 255 = max).
