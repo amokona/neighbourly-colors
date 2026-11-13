@@ -9,6 +9,9 @@ import {
   CUSTOM_EFFECTS,
   isCustomEffectId,
   getCustomEffectById,
+  registerAiRecipe,
+  unregisterAiRecipe,
+  getAiRecipe,
   effectRunner
 } from './effects.js';
 
@@ -148,8 +151,210 @@ let usageData = {
   uniqueIps: [],
   logs: [],
   idlePlaylist: { ...DEFAULT_IDLE_PLAYLIST },
-  schedule: { ...DEFAULT_SCHEDULE }
+  schedule: { ...DEFAULT_SCHEDULE },
+  geminiApiKey: '',
+  aiCreations: []
 };
+
+const VALID_AI_PATTERNS = new Set([
+  'diagonal_45_up',
+  'diagonal_45_down',
+  'downward_wave',
+  'upward_wave',
+  'right_to_left',
+  'left_to_right',
+  'twinkle',
+  'pulse_heartbeat'
+]);
+
+function isAiEffectId(id) {
+  return typeof id === 'string' && id.startsWith('ai:') && Boolean(getAiRecipe(id));
+}
+
+function sanitizeAiRecipe(raw, fallbackPrompt = '') {
+  const name = typeof raw?.name === 'string' && raw.name.trim()
+    ? raw.name.trim().slice(0, 40)
+    : `✨ ${fallbackPrompt.trim().slice(0, 26) || 'Création IA'}`;
+  const description = typeof raw?.description === 'string' && raw.description.trim()
+    ? raw.description.trim().slice(0, 110)
+    : `Effet sur mesure : « ${fallbackPrompt.trim().slice(0, 80)} »`;
+  const pattern = VALID_AI_PATTERNS.has(raw?.pattern) ? raw.pattern : 'diagonal_45_up';
+  const speed = Number.isFinite(Number(raw?.speed))
+    ? Math.max(0.4, Math.min(2.6, Number(raw.speed)))
+    : 1.25;
+  const scale = Number.isFinite(Number(raw?.scale))
+    ? Math.max(1.0, Math.min(5.0, Number(raw.scale)))
+    : 2.6;
+  const twinkle = Number.isFinite(Number(raw?.twinkle))
+    ? Math.max(0, Math.min(1, Number(raw.twinkle)))
+    : 0.2;
+  const sharpness = Number.isFinite(Number(raw?.sharpness))
+    ? Math.max(0, Math.min(1, Number(raw.sharpness)))
+    : 0.25;
+
+  let palette = [];
+  if (Array.isArray(raw?.palette)) {
+    for (const c of raw.palette.slice(0, 6)) {
+      if (Array.isArray(c) && c.length >= 3) {
+        palette.push([
+          Math.max(0, Math.min(255, Math.round(Number(c[0]) || 0))),
+          Math.max(0, Math.min(255, Math.round(Number(c[1]) || 0))),
+          Math.max(0, Math.min(255, Math.round(Number(c[2]) || 0)))
+        ]);
+      }
+    }
+  }
+  if (palette.length === 0) {
+    palette = [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
+  } else if (palette.length === 1) {
+    palette.push([255, 255, 255]);
+  }
+
+  return {
+    name,
+    description,
+    pattern,
+    speed: Math.round(speed * 100) / 100,
+    scale: Math.round(scale * 100) / 100,
+    twinkle: Math.round(twinkle * 100) / 100,
+    sharpness: Math.round(sharpness * 100) / 100,
+    palette
+  };
+}
+
+function generateFallbackRecipe(promptText = '') {
+  const lower = promptText.toLowerCase();
+  const colorDictionary = [
+    { keys: ['canadien', 'habs', 'montréal', 'montreal', 'tricolore'], multi: [[25, 70, 235], [255, 255, 255], [239, 35, 50]] },
+    { keys: ['québec', 'quebec', 'fleurdelisé'], multi: [[20, 75, 230], [255, 255, 255]] },
+    { keys: ['arc-en-ciel', 'rainbow', 'multicolore'], multi: [[239, 38, 38], [249, 115, 22], [250, 204, 21], [16, 185, 129], [59, 130, 246], [168, 85, 247]] },
+    { keys: ['rouge', 'red', 'carmin', 'feu', 'lave', 'magma'], rgb: [239, 38, 38] },
+    { keys: ['bleu', 'blue', 'azur', 'glace', 'océan', 'ocean', 'saphir'], rgb: [37, 99, 235] },
+    { keys: ['blanc', 'white', 'neige', 'snow', 'argent', 'givre'], rgb: [255, 255, 255] },
+    { keys: ['vert', 'green', 'émeraude', 'menthe', 'sapin', 'forêt'], rgb: [16, 195, 110] },
+    { keys: ['jaune', 'yellow', 'or', 'gold', 'doré', 'soleil', 'citron'], rgb: [250, 204, 21] },
+    { keys: ['orange', 'ambre', 'corail', 'flamme'], rgb: [249, 115, 22] },
+    { keys: ['violet', 'purple', 'mauve', 'lilas', 'améthyste'], rgb: [147, 51, 234] },
+    { keys: ['rose', 'pink', 'magenta', 'néon', 'fuchsia'], rgb: [236, 72, 153] },
+    { keys: ['cyan', 'turquoise', 'aqua', 'lagoon'], rgb: [6, 182, 212] },
+    { keys: ['chocolat', 'brun', 'cuivre', 'bronze'], rgb: [160, 82, 45] }
+  ];
+
+  let palette = [];
+  for (const entry of colorDictionary) {
+    if (entry.keys.some(k => lower.includes(k))) {
+      if (entry.multi) {
+        palette.push(...entry.multi);
+      } else if (entry.rgb) {
+        palette.push(entry.rgb);
+      }
+    }
+  }
+  if (palette.length === 0) {
+    palette = [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
+  } else if (palette.length === 1) {
+    palette.push([255, 255, 255]);
+  }
+
+  let pattern = 'diagonal_45_up';
+  if (lower.includes('45') && (lower.includes('bas') || lower.includes('descend') || lower.includes('down'))) {
+    pattern = 'diagonal_45_down';
+  } else if (lower.includes('45') || lower.includes('diag') || lower.includes('spirale') || lower.includes('sucre')) {
+    pattern = 'diagonal_45_up';
+  } else if (lower.includes('descend') || lower.includes('bas') || lower.includes('tomb') || lower.includes('pluie') || lower.includes('down') || lower.includes('cascade')) {
+    pattern = 'downward_wave';
+  } else if (lower.includes('mont') || lower.includes('haut') || lower.includes('up') || lower.includes('lave') || lower.includes('flamme') || lower.includes('feu')) {
+    pattern = 'upward_wave';
+  } else if (lower.includes('gauche') || lower.includes('right to left') || lower.includes('tourne')) {
+    pattern = 'right_to_left';
+  } else if (lower.includes('droite') || lower.includes('left to right')) {
+    pattern = 'left_to_right';
+  } else if (lower.includes('coeur') || lower.includes('cœur') || lower.includes('pulse') || lower.includes('battement') || lower.includes('respir')) {
+    pattern = 'pulse_heartbeat';
+  } else if (lower.includes('scintill') || lower.includes('twinkl') || lower.includes('étoile') || lower.includes('étincel')) {
+    pattern = 'twinkle';
+  }
+
+  const twinkle = (lower.includes('scintill') || lower.includes('twinkl') || lower.includes('étincel') || lower.includes('étoile')) ? 0.85 : 0.2;
+  const sharpness = (lower.includes('rayure') || lower.includes('bande') || lower.includes('stripe') || lower.includes('drapeau')) ? 0.8 : 0.25;
+  const speed = (lower.includes('lent') || lower.includes('doux') || lower.includes('slow') || lower.includes('calme')) ? 0.75 :
+                (lower.includes('rapide') || lower.includes('vite') || lower.includes('fast') || lower.includes('vif')) ? 1.85 : 1.3;
+
+  const cleanText = promptText.trim();
+  const shortTitle = cleanText.slice(0, 26) + (cleanText.length > 26 ? '…' : '');
+  return sanitizeAiRecipe({
+    name: `✨ ${shortTitle || 'Création IA'}`,
+    description: `Effet sur mesure : « ${cleanText.slice(0, 90)} »`,
+    pattern,
+    speed,
+    scale: 2.6,
+    twinkle,
+    sharpness,
+    palette
+  }, promptText);
+}
+
+async function generateEffectWithGeminiOrFallback(promptText) {
+  const apiKey = (usageData.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) {
+    return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
+  }
+
+  const systemInstruction = `Tu es un designer d'effets lumineux 3D pour un sapin de Noël Twinkly de 2400 LEDs.
+Convertis la description de l'utilisateur en un objet JSON strict avec les propriétés suivantes :
+- "name": Titre court et accrocheur en français commençant par un emoji (max 32 caractères, ex: "🏒 Tricolore Glorieux", "🌋 Lave Volcanique").
+- "description": Courte phrase descriptive en français (max 95 caractères).
+- "pattern": Choisis exactement l'un de :
+  - "diagonal_45_up" (rayures ou bandes diagonales montant à 45 degrés)
+  - "diagonal_45_down" (rayures ou bandes diagonales descendant à 45 degrés)
+  - "downward_wave" (vagues ou couleurs voyageant du haut vers le bas)
+  - "upward_wave" (vagues ou flammes montant du bas vers le haut)
+  - "right_to_left" (couleurs tournant de droite à gauche)
+  - "left_to_right" (couleurs tournant de gauche à droite)
+  - "twinkle" (scintillement d'étoiles sur tout le sapin)
+  - "pulse_heartbeat" (pulsation rythmique sur tout le sapin)
+- "palette": Tableau de 2 à 5 couleurs au format [R, G, B] (entiers de 0 à 255) correspondant exactement aux couleurs demandées.
+- "speed": Nombre entre 0.5 (très lent) et 2.4 (très rapide), défaut 1.3.
+- "scale": Nombre entre 1.2 (larges vagues) et 4.5 (rayures serrées), défaut 2.6.
+- "twinkle": Nombre entre 0.0 (aucun scintillement) et 1.0 (scintillement intense).
+- "sharpness": Nombre entre 0.0 (dégradé doux) et 0.9 (rayures franches et nettes).`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: 'user', parts: [{ text: promptText }] }],
+          generationConfig: {
+            temperature: 0.6,
+            responseMimeType: 'application/json'
+          }
+        })
+      }
+    );
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn(`Gemini API returned ${response.status}:`, errText.slice(0, 200));
+      return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
+    }
+
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const parsed = JSON.parse(rawText);
+    return { recipe: sanitizeAiRecipe(parsed, promptText), source: 'gemini' };
+  } catch (err) {
+    console.warn('Gemini generation failed, using smart local parser:', err.message);
+    return { recipe: generateFallbackRecipe(promptText), source: 'fallback' };
+  }
+}
 
 let knownMovies = {
   0: 'Chute de Neige Étincelante',
@@ -278,8 +483,17 @@ function loadUsageData() {
           enabled: typeof savedSchedule.enabled === 'boolean' ? savedSchedule.enabled : DEFAULT_SCHEDULE.enabled,
           onTime: TIME_HHMM_REGEX.test(savedSchedule.onTime || '') ? savedSchedule.onTime : DEFAULT_SCHEDULE.onTime,
           offTime: TIME_HHMM_REGEX.test(savedSchedule.offTime || '') ? savedSchedule.offTime : DEFAULT_SCHEDULE.offTime
-        }
+        },
+        geminiApiKey: typeof parsed.geminiApiKey === 'string' ? parsed.geminiApiKey : '',
+        aiCreations: Array.isArray(parsed.aiCreations) ? parsed.aiCreations : []
       };
+
+      for (const item of usageData.aiCreations) {
+        if (item && item.id && item.recipe) {
+          registerAiRecipe(item.id, item.recipe);
+          knownMovies[item.id] = item.name || item.recipe.name || 'Création IA';
+        }
+      }
     }
   } catch (error) {
     console.error('Error loading usage data:', error);
@@ -342,9 +556,9 @@ async function forAllControllers(actionFn) {
   return results;
 }
 
-// Helper to apply either a custom 3D effect or an on-device movie across all controllers
+// Helper to apply either a custom 3D effect, an AI-generated effect, or an on-device movie across all controllers
 async function applyEffectOrMovie(movieId) {
-  if (isCustomEffectId(movieId)) {
+  if (isCustomEffectId(movieId) || isAiEffectId(movieId)) {
     await effectRunner.start(getClient, TWINKLY_IPS, movieId);
   } else {
     effectRunner.stop();
@@ -852,7 +1066,7 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
     }
 
     stopIdlePlaylist();
-    const targetId = isCustomEffectId(movie_id) ? movie_id : Number(movie_id);
+    const targetId = (isCustomEffectId(movie_id) || isAiEffectId(movie_id)) ? movie_id : Number(movie_id);
     await applyEffectOrMovie(targetId);
 
     const movieName = knownMovies[targetId] || `Effet #${targetId}`;
@@ -870,6 +1084,170 @@ app.post('/api/current-movie', requireAdmin, async (req, res) => {
     res.json({ success: true, movie_id: targetId });
   } catch (error) {
     console.error('Error setting current movie:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Public & Admin AI Effect Generation Endpoints
+const aiRateLimitMap = new Map();
+
+function getSortedAiCreations() {
+  const list = Array.isArray(usageData.aiCreations) ? [...usageData.aiCreations] : [];
+  return list.sort((a, b) => {
+    if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+      return a.pinned ? -1 : 1;
+    }
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+}
+
+app.get('/api/ai/creations', (req, res) => {
+  res.json({
+    creations: getSortedAiCreations().slice(0, 20)
+  });
+});
+
+app.post('/api/ai/generate', async (req, res) => {
+  try {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const lastCall = aiRateLimitMap.get(ip) || 0;
+    if (Date.now() - lastCall < 2500) {
+      return res.status(429).json({
+        error: 'Veuillez patienter quelques secondes avant de générer un autre effet.'
+      });
+    }
+    aiRateLimitMap.set(ip, Date.now());
+
+    const { prompt, nickname } = req.body || {};
+    const cleanPrompt = typeof prompt === 'string' ? prompt.trim().slice(0, 140) : '';
+    if (cleanPrompt.length < 3) {
+      return res.status(400).json({ error: 'Veuillez décrire l\'effet souhaité (au moins 3 caractères).' });
+    }
+
+    const cleanAuthor = typeof nickname === 'string' && nickname.trim()
+      ? nickname.trim().slice(0, 20)
+      : 'Voisin';
+
+    const { recipe, source } = await generateEffectWithGeminiOrFallback(cleanPrompt);
+    const id = `ai:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const creation = {
+      id,
+      name: recipe.name,
+      description: recipe.description,
+      prompt: cleanPrompt,
+      author: cleanAuthor,
+      createdAt: new Date().toISOString(),
+      pinned: false,
+      source,
+      recipe
+    };
+
+    registerAiRecipe(id, recipe);
+    knownMovies[id] = recipe.name;
+
+    if (!Array.isArray(usageData.aiCreations)) {
+      usageData.aiCreations = [];
+    }
+    usageData.aiCreations.unshift(creation);
+
+    // Keep all pinned items + up to 30 most recent unpinned items
+    const pinned = usageData.aiCreations.filter(c => c.pinned);
+    const unpinned = usageData.aiCreations.filter(c => !c.pinned);
+    if (unpinned.length > 30) {
+      const removed = unpinned.slice(30);
+      for (const r of removed) {
+        unregisterAiRecipe(r.id);
+      }
+    }
+    usageData.aiCreations = [...pinned, ...unpinned.slice(0, 30)];
+    saveUsageData();
+
+    addLogEntry({
+      event: 'ai_generate',
+      nickname: cleanAuthor,
+      ip,
+      type: 'effect',
+      movieId: id,
+      movieName: recipe.name,
+      status: 'info',
+      details: `Effet IA généré (${source === 'gemini' ? 'Gemini' : 'Local'}): « ${cleanPrompt} » → ${recipe.name}`
+    });
+
+    res.json({
+      success: true,
+      creation,
+      creations: getSortedAiCreations().slice(0, 20)
+    });
+  } catch (error) {
+    console.error('Error generating AI effect:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/ai/config', requireAdmin, (req, res) => {
+  try {
+    const { apiKey } = req.body || {};
+    if (typeof apiKey === 'string') {
+      usageData.geminiApiKey = apiKey.trim();
+      saveUsageData();
+      addLogEntry({
+        event: 'admin_action',
+        nickname: ADMIN_USER,
+        ip: req.ip || req.socket?.remoteAddress,
+        status: 'info',
+        details: usageData.geminiApiKey
+          ? 'Clé API Gemini configurée dans l\'interface Admin'
+          : 'Clé API Gemini supprimée (mode parseur local actif)'
+      });
+    }
+    const hasEnv = Boolean(process.env.GEMINI_API_KEY);
+    const hasAdmin = Boolean(usageData.geminiApiKey);
+    res.json({
+      success: true,
+      hasKey: hasEnv || hasAdmin,
+      source: hasAdmin ? 'admin' : (hasEnv ? 'env' : 'fallback')
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/ai/pin', requireAdmin, (req, res) => {
+  try {
+    const { id } = req.body || {};
+    const target = (usageData.aiCreations || []).find(c => c.id === id);
+    if (!target) {
+      return res.status(404).json({ error: 'Création IA introuvable' });
+    }
+    target.pinned = !target.pinned;
+    saveUsageData();
+    res.json({
+      success: true,
+      creation: target,
+      creations: getSortedAiCreations()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/ai/delete', requireAdmin, (req, res) => {
+  try {
+    const { id } = req.body || {};
+    const idx = (usageData.aiCreations || []).findIndex(c => c.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Création IA introuvable' });
+    }
+    const [removed] = usageData.aiCreations.splice(idx, 1);
+    unregisterAiRecipe(removed.id);
+    saveUsageData();
+    res.json({
+      success: true,
+      removed,
+      creations: getSortedAiCreations()
+    });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -938,6 +1316,11 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
         sleeping: isSleepingForNight,
         serverTime: getCurrentTimeHHMM(),
         timezone: SCHEDULE_TIMEZONE
+      },
+      aiConfig: {
+        hasKey: Boolean(usageData.geminiApiKey || process.env.GEMINI_API_KEY),
+        source: usageData.geminiApiKey ? 'admin' : (process.env.GEMINI_API_KEY ? 'env' : 'fallback'),
+        creations: getSortedAiCreations()
       },
       queueState: {
         paused: queuePaused,
@@ -1026,7 +1409,7 @@ app.post('/api/admin/playlist', requireAdmin, async (req, res) => {
       cleanEffects = [];
       const seen = new Set();
       for (const rawId of effects) {
-        if (isCustomEffectId(rawId)) {
+        if (isCustomEffectId(rawId) || isAiEffectId(rawId)) {
           if (!seen.has(rawId)) {
             seen.add(rawId);
             cleanEffects.push(rawId);
@@ -1224,7 +1607,7 @@ app.post('/api/queue/join', async (req, res) => {
 
     let validatedMovieId = null;
     if (type === 'effect') {
-      if (isCustomEffectId(movieId)) {
+      if (isCustomEffectId(movieId) || isAiEffectId(movieId)) {
         validatedMovieId = movieId;
       } else {
         const parsedMovieId = Number(movieId);

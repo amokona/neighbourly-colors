@@ -128,8 +128,140 @@ function hash01(n) {
   return x - Math.floor(x);
 }
 
+const aiRecipes = new Map();
+
+export function registerAiRecipe(id, recipe) {
+  aiRecipes.set(String(id), recipe);
+}
+
+export function unregisterAiRecipe(id) {
+  aiRecipes.delete(String(id));
+}
+
+export function getAiRecipe(id) {
+  return aiRecipes.get(String(id)) || null;
+}
+
+function samplePaletteRgb(palette, phase, sharpness = 0) {
+  if (!Array.isArray(palette) || palette.length === 0) {
+    return [255, 255, 255];
+  }
+  if (palette.length === 1) {
+    return palette[0];
+  }
+  const n = palette.length;
+  const p = (((phase % 1) + 1) % 1) * n;
+  const i0 = Math.floor(p) % n;
+  const i1 = (i0 + 1) % n;
+  let f = p - Math.floor(p);
+  if (sharpness > 0.01) {
+    // Crisp stripe transition when sharpness is high
+    const edge = Math.max(0.02, 0.5 * (1 - Math.min(0.95, sharpness)));
+    if (f < 0.5 - edge) f = 0;
+    else if (f > 0.5 + edge) f = 1;
+    else f = (f - (0.5 - edge)) / (2 * edge);
+  }
+  const c0 = palette[i0];
+  const c1 = palette[i1];
+  return [
+    Math.round(c0[0] * (1 - f) + c1[0] * f),
+    Math.round(c0[1] * (1 - f) + c1[1] * f),
+    Math.round(c0[2] * (1 - f) + c1[2] * f)
+  ];
+}
+
+function evaluateAiRecipe(recipe, led, t) {
+  const { y, angle, index } = led;
+  const palette = Array.isArray(recipe.palette) && recipe.palette.length > 0
+    ? recipe.palette
+    : [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
+  const speed = Number.isFinite(recipe.speed) ? Math.max(0.2, Math.min(3.5, recipe.speed)) : 1.25;
+  const scale = Number.isFinite(recipe.scale) ? Math.max(0.8, Math.min(6.0, recipe.scale)) : 2.5;
+  const twinkle = Number.isFinite(recipe.twinkle) ? Math.max(0, Math.min(1, recipe.twinkle)) : 0.2;
+  const sharpness = Number.isFinite(recipe.sharpness) ? Math.max(0, Math.min(1, recipe.sharpness)) : 0.2;
+  const pattern = recipe.pattern || 'diagonal_45_up';
+
+  let r = 0, g = 0, b = 0, w = 0;
+
+  if (pattern === 'twinkle') {
+    const seed = hash01(index * 9.1 + 3.7);
+    const wave = Math.sin(t * (2.2 + seed * 3.8) * speed + seed * 40.0) * 0.5 + 0.5;
+    const [pr, pg, pb] = samplePaletteRgb(palette, seed + wave * 0.5, sharpness);
+    const bright = 0.35 + 0.65 * Math.pow(wave, 2.2);
+    r = Math.round(pr * bright);
+    g = Math.round(pg * bright);
+    b = Math.round(pb * bright);
+    w = Math.round(Math.pow(wave, 5) * 180 * Math.max(0.3, twinkle));
+    return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+  }
+
+  if (pattern === 'pulse_heartbeat') {
+    const cycle = ((t * speed * 0.75) % 1.2) / 1.2;
+    const b1 = Math.exp(-Math.pow((cycle - 0.18) / 0.07, 2));
+    const b2 = 0.8 * Math.exp(-Math.pow((cycle - 0.38) / 0.09, 2));
+    const pulse = Math.min(1, b1 + b2);
+    const [pr, pg, pb] = samplePaletteRgb(palette, y * 0.5 - t * 0.2 * speed, 0);
+    const factor = 0.35 + 0.65 * pulse;
+    r = Math.round(pr * factor);
+    g = Math.round(pg * factor);
+    b = Math.round(pb * factor);
+    w = Math.round(pulse * 120 * twinkle);
+    return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+  }
+
+  let phase = 0;
+  switch (pattern) {
+    case 'diagonal_45_up':
+      // As t increases, constant phase moves to larger y (upward) and wraps around angle
+      phase = angle * Math.round(scale) - y * (scale * 0.85) + t * speed * 0.45;
+      break;
+    case 'diagonal_45_down':
+      // As t increases, constant phase moves to smaller y (downward) and wraps around angle
+      phase = angle * Math.round(scale) + y * (scale * 0.85) + t * speed * 0.45;
+      break;
+    case 'downward_wave':
+      // As t increases, constant phase moves to smaller y (top to bottom)
+      phase = y * (scale * 0.75) + t * speed * 0.48 + Math.sin(angle * Math.PI * 2) * 0.06;
+      break;
+    case 'upward_wave':
+      // As t increases, constant phase moves to larger y (bottom to top)
+      phase = y * (scale * 0.75) - t * speed * 0.48 + Math.sin(angle * Math.PI * 2) * 0.06;
+      break;
+    case 'right_to_left':
+      phase = angle * Math.max(1, Math.round(scale * 0.8)) + t * speed * 0.45;
+      break;
+    case 'left_to_right':
+      phase = angle * Math.max(1, Math.round(scale * 0.8)) - t * speed * 0.45;
+      break;
+    default:
+      phase = angle * Math.round(scale) - y * (scale * 0.85) + t * speed * 0.45;
+      break;
+  }
+
+  [r, g, b] = samplePaletteRgb(palette, phase, sharpness);
+
+  if (twinkle > 0.04) {
+    const seed = hash01(index * 7.3 + 5.1);
+    const sp = Math.pow(Math.max(0, Math.sin(t * (3.2 + seed * 4.0) + seed * 30.0)), 8) * twinkle;
+    w = Math.round(sp * 210);
+    r = Math.min(255, Math.round(r + sp * 180));
+    g = Math.min(255, Math.round(g + sp * 180));
+    b = Math.min(255, Math.round(b + sp * 180));
+  } else if (r > 215 && g > 215 && b > 215) {
+    w = Math.round((r + g + b) / 3 * 0.65);
+  }
+
+  return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+}
+
 // Compute [w, r, g, b] for a single LED so every LED on the tree is actively lit
 function evaluateLed(effectId, led, t) {
+  if (typeof effectId === 'string' && effectId.startsWith('ai:')) {
+    const recipe = aiRecipes.get(effectId);
+    if (recipe) {
+      return evaluateAiRecipe(recipe, led, t);
+    }
+  }
   const { x, y, z, angle, index } = led;
 
   switch (effectId) {

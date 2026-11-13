@@ -691,6 +691,34 @@
             </div>
         </div>
 
+        <!-- AI Effect Creator Management Panel -->
+        <div class="panel" style="margin-bottom: 24px;">
+            <h2>
+                <span>🪄 Créateur d'Effets IA (Gemini & Créations des Voisins)</span>
+                <span class="badge badge-info" id="aiEngineBadge">Mode Local Intelligent</span>
+            </h2>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 14px;">
+                Configurez votre clé API Google Gemini (`gemini-2.5-flash`) pour traduire les descriptions libres des visiteurs en effets 3D, et gérez les créations partagées dans l'onglet <strong>🪄 Créer (IA)</strong>.
+            </p>
+
+            <div class="inline-controls" style="margin-bottom: 16px;">
+                <input
+                    type="password"
+                    id="geminiApiKeyInput"
+                    placeholder="Coller une clé GEMINI_API_KEY (AIzaSy...)"
+                    style="flex: 1; min-width: 240px; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;"
+                >
+                <button type="button" class="btn btn-primary" onclick="saveGeminiApiKey()">🔑 Enregistrer la clé Gemini</button>
+            </div>
+
+            <h3 style="font-size: 14px; color: #475569; margin-bottom: 8px;">
+                Créations des Voisins (<span id="adminAiCreationsCount">0</span>)
+            </h3>
+            <ul class="queue-list" id="adminAiCreationsList">
+                <li style="color:#94a3b8; font-style:italic; font-size:13px;">Aucune création IA pour le moment</li>
+            </ul>
+        </div>
+
         <!-- Top Effects & Top Colors -->
         <div class="main-grid">
             <div class="panel">
@@ -978,6 +1006,46 @@
             }
         }
 
+        async function saveGeminiApiKey() {
+            const input = document.getElementById('geminiApiKeyInput');
+            const apiKey = input.value.trim();
+            const res = await fetch(`${API_BASE}/admin/ai/config`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ apiKey })
+            });
+            if (res.ok) {
+                input.value = '';
+                showAlert(apiKey ? 'Clé API Gemini enregistrée !' : 'Clé Gemini effacée (mode local actif).', 'success');
+                loadAdminStats();
+            } else {
+                showAlert('Erreur lors de la sauvegarde de la clé Gemini');
+            }
+        }
+
+        async function togglePinAiCreation(id) {
+            const res = await fetch(`${API_BASE}/admin/ai/pin`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) {
+                loadAdminStats();
+            }
+        }
+
+        async function deleteAiCreation(id) {
+            const res = await fetch(`${API_BASE}/admin/ai/delete`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) {
+                showAlert('Création IA supprimée', 'success');
+                loadAdminStats();
+            }
+        }
+
         async function loadAdminStats() {
             try {
                 const res = await fetch(`${API_BASE}/admin/stats`, {
@@ -1003,7 +1071,7 @@
         }
 
         function renderStats(data) {
-            const { summary, topColors, topEffects, idlePlaylist, schedule, queueState, logs } = data;
+            const { summary, topColors, topEffects, idlePlaylist, schedule, aiConfig, queueState, logs } = data;
             document.getElementById('statTotalTurns').textContent = summary.totalTurns;
             document.getElementById('statLast24h').textContent = `${summary.turnsLast24h} durant les dernières 24h`;
             document.getElementById('statUniqueVisitors').textContent = summary.uniqueVisitors;
@@ -1013,6 +1081,84 @@
             const total = summary.totalTurns || 1;
             document.getElementById('statColorPct').textContent = `${Math.round((summary.colorTurns / total) * 100)}% des choix`;
             document.getElementById('statEffectPct').textContent = `${Math.round((summary.effectTurns / total) * 100)}% des choix`;
+
+            // AI Creator status & list
+            if (aiConfig) {
+                const aiBadge = document.getElementById('aiEngineBadge');
+                if (aiBadge) {
+                    if (aiConfig.hasKey) {
+                        aiBadge.textContent = aiConfig.source === 'env' ? '✨ Gemini API Actif (ENV)' : '✨ Gemini API Actif';
+                        aiBadge.className = 'badge badge-success';
+                    } else {
+                        aiBadge.textContent = '⚡ Parseur Local Actif (Sans clé)';
+                        aiBadge.className = 'badge badge-info';
+                    }
+                }
+                const creations = aiConfig.creations || [];
+                const countEl = document.getElementById('adminAiCreationsCount');
+                const listEl = document.getElementById('adminAiCreationsList');
+                if (countEl) countEl.textContent = creations.length;
+                if (listEl) {
+                    listEl.innerHTML = '';
+                    if (creations.length === 0) {
+                        listEl.innerHTML = '<li style="color:#94a3b8; font-style:italic; font-size:13px;">Aucune création IA pour le moment</li>';
+                    } else {
+                        creations.forEach(item => {
+                            const li = document.createElement('li');
+                            li.className = 'queue-item';
+
+                            const left = document.createElement('div');
+                            left.style.minWidth = '0';
+                            left.style.flex = '1';
+
+                            const title = document.createElement('div');
+                            title.style.fontWeight = '700';
+                            title.style.fontSize = '13px';
+                            title.textContent = `${item.pinned ? '📌 ' : ''}${item.name} (par ${item.author || 'Voisin'})`;
+
+                            const prompt = document.createElement('div');
+                            prompt.style.fontSize = '12px';
+                            prompt.style.color = '#64748b';
+                            prompt.textContent = `« ${item.prompt} »`;
+
+                            left.appendChild(title);
+                            left.appendChild(prompt);
+
+                            const actions = document.createElement('div');
+                            actions.className = 'inline-controls';
+
+                            const playBtn = document.createElement('button');
+                            playBtn.className = 'btn btn-secondary';
+                            playBtn.style.padding = '5px 9px';
+                            playBtn.style.fontSize = '12px';
+                            playBtn.textContent = '▶️ Tester';
+                            playBtn.onclick = () => applyDirectMovie(item.id);
+
+                            const pinBtn = document.createElement('button');
+                            pinBtn.className = 'btn btn-secondary';
+                            pinBtn.style.padding = '5px 9px';
+                            pinBtn.style.fontSize = '12px';
+                            pinBtn.textContent = item.pinned ? 'Désépingler' : '📌 Épingler';
+                            pinBtn.onclick = () => togglePinAiCreation(item.id);
+
+                            const delBtn = document.createElement('button');
+                            delBtn.className = 'btn btn-danger';
+                            delBtn.style.padding = '5px 9px';
+                            delBtn.style.fontSize = '12px';
+                            delBtn.textContent = '🗑️';
+                            delBtn.onclick = () => deleteAiCreation(item.id);
+
+                            actions.appendChild(playBtn);
+                            actions.appendChild(pinBtn);
+                            actions.appendChild(delBtn);
+
+                            li.appendChild(left);
+                            li.appendChild(actions);
+                            listEl.appendChild(li);
+                        });
+                    }
+                }
+            }
 
             // Automatic Night Schedule status & initial sync
             if (schedule) {

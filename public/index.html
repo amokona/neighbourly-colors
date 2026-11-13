@@ -266,20 +266,21 @@
         /* Segmented Control */
         .segmented-control {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1.1fr;
             background: #1e293b;
             padding: 4px;
             border-radius: 12px;
             border: 1px solid #334155;
+            gap: 4px;
         }
 
         .seg-btn {
-            padding: 10px 12px;
+            padding: 10px 8px;
             border-radius: 9px;
             border: none;
             background: transparent;
             color: #94a3b8;
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
@@ -294,6 +295,224 @@
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: #ffffff;
             box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        }
+
+        .seg-btn.ai-tab.active {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 55%, #ec4899 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(168, 85, 247, 0.45);
+        }
+
+        /* AI Creator Section */
+        .ai-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .ai-prompt-box {
+            background: #0f172a;
+            border: 1.5px solid #4f46e5;
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .ai-prompt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: #c4b5fd;
+        }
+
+        .ai-prompt-textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: #f8fafc;
+            font-size: 13.5px;
+            line-height: 1.4;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            min-height: 48px;
+        }
+
+        .ai-prompt-textarea::placeholder {
+            color: #64748b;
+        }
+
+        .ai-prompt-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            border-top: 1px solid #1e293b;
+            padding-top: 8px;
+        }
+
+        .ai-generate-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 60%, #ec4899 100%);
+            color: #ffffff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.35);
+            transition: transform 0.15s, opacity 0.15s;
+        }
+
+        .ai-generate-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .ai-generate-btn:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .ai-chips-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .ai-chips-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .ai-chip {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #cbd5e1;
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 5px 10px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .ai-chip:hover {
+            border-color: #a855f7;
+            color: #ffffff;
+            background: rgba(168, 85, 247, 0.18);
+        }
+
+        .ai-result-card {
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.22) 0%, rgba(168, 85, 247, 0.22) 100%);
+            border: 1.5px solid #818cf8;
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .ai-result-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ai-result-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+
+        .ai-badge {
+            font-size: 10px;
+            font-weight: 700;
+            background: rgba(236, 72, 153, 0.25);
+            border: 1px solid rgba(236, 72, 153, 0.5);
+            color: #fbcfe8;
+            padding: 2px 8px;
+            border-radius: 999px;
+            flex-shrink: 0;
+        }
+
+        .ai-tags-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .ai-tag {
+            font-size: 10.5px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            color: #cbd5e1;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
+        .ai-community-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 145px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .ai-community-item {
+            background: #1e293b;
+            border: 1.5px solid #334155;
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .ai-community-item:hover {
+            border-color: #818cf8;
+        }
+
+        .ai-community-item.selected {
+            border-color: #c084fc;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
+        }
+
+        .ai-community-info {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .ai-community-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ai-community-sub {
+            font-size: 11px;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* Effects Grid */
@@ -648,10 +867,13 @@
             <!-- Mode Segmented Switcher -->
             <div class="segmented-control">
                 <button type="button" class="seg-btn active" id="effectTypeBtn" onclick="selectControlType('effect')">
-                    ✨ Effets Animés
+                    ✨ Effets
                 </button>
                 <button type="button" class="seg-btn" id="colorTypeBtn" onclick="selectControlType('color')">
-                    🎨 Couleur Unie
+                    🎨 Couleur
+                </button>
+                <button type="button" class="seg-btn ai-tab" id="aiTypeBtn" onclick="selectControlType('ai')">
+                    🪄 Créer (IA)
                 </button>
             </div>
 
@@ -669,6 +891,54 @@
                         <span id="customHexLabel" style="color: #94a3b8; font-size: 12px;">#EF4444</span>
                     </div>
                     <input type="color" id="colorPicker" value="#ef4444">
+                </div>
+            </div>
+
+            <!-- AI Effect Creator Section -->
+            <div id="aiSection" class="ai-panel hidden">
+                <div class="ai-prompt-box">
+                    <div class="ai-prompt-header">
+                        <span>✨ Décrivez l'effet que vous voulez voir</span>
+                        <span id="aiCharCount" style="color: #64748b; font-weight: 500; font-size: 11px;">0 / 140</span>
+                    </div>
+                    <textarea
+                        id="aiPromptInput"
+                        class="ai-prompt-textarea"
+                        maxlength="140"
+                        placeholder="Ex: Rayures bleu royal, blanc et rouge qui montent à 45 degrés..."
+                    ></textarea>
+                    <div class="ai-prompt-footer">
+                        <span style="font-size: 11px; color: #64748b;">⚡ Rendu 3D temps réel sur 2400 LEDs</span>
+                        <button type="button" class="ai-generate-btn" id="aiGenerateBtn" onclick="generateAiEffect()">
+                            ✨ Générer l'effet
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ai-chips-label">💡 Idées rapides (1 clic)</div>
+                <div class="ai-chips-row">
+                    <button type="button" class="ai-chip" onclick="useAiSuggestion('Rayures bleu royal, blanc et rouge qui montent à 45 degrés')">🏒 Canadiens 45°</button>
+                    <button type="button" class="ai-chip" onclick="useAiSuggestion('Bleu royal et blanc pur qui scintillent comme du givre')">⚜️ Québec Scintillant</button>
+                    <button type="button" class="ai-chip" onclick="useAiSuggestion('Lave volcanique rouge, orange et jaune qui monte vers le haut')">🌋 Lave Montante</button>
+                    <button type="button" class="ai-chip" onclick="useAiSuggestion('Pluie d\'étoiles roses, violettes et dorées qui descendent')">🌸 Pluie Roses & Or</button>
+                    <button type="button" class="ai-chip" onclick="useAiSuggestion('Vagues vert menthe, blanc et chocolat qui descendent doucement')">🍬 Menthe & Chocolat</button>
+                </div>
+
+                <div class="ai-result-card hidden" id="aiResultCard">
+                    <div class="ai-result-top">
+                        <div class="ai-result-title" id="aiResultTitle">✨ Création IA</div>
+                        <span class="ai-badge" id="aiResultBadge">Prêt à jouer</span>
+                    </div>
+                    <div class="movie-preview-bar">
+                        <canvas id="aiPreviewCanvas" class="movie-preview-canvas" width="208" height="34"></canvas>
+                    </div>
+                    <div class="movie-desc" id="aiResultDesc" style="color: #e2e8f0;"></div>
+                    <div class="ai-tags-row" id="aiResultTags"></div>
+                </div>
+
+                <div id="aiCommunityWrap" class="hidden" style="display: flex; flex-direction: column; gap: 6px;">
+                    <div class="ai-chips-label">🕒 Créés récemment par les voisins</div>
+                    <div class="ai-community-list" id="aiCommunityList"></div>
                 </div>
             </div>
         </div>
@@ -725,7 +995,9 @@
         let selectedMovieId = null;
         let selectedColor = PRESET_COLORS[0].hex;
         let selectedColorName = PRESET_COLORS[0].name;
-        let controlType = 'effect'; // Default to effects
+        let controlType = 'effect'; // 'effect' | 'color' | 'ai'
+        let aiCreations = [];
+        let selectedAiCreation = null;
         let queueDrawerOpen = false;
         let statusTimeout = null;
 
@@ -757,8 +1029,10 @@
             controlType = type;
             document.getElementById('effectTypeBtn').classList.toggle('active', type === 'effect');
             document.getElementById('colorTypeBtn').classList.toggle('active', type === 'color');
+            document.getElementById('aiTypeBtn').classList.toggle('active', type === 'ai');
             document.getElementById('effectSection').classList.toggle('hidden', type !== 'effect');
             document.getElementById('colorSection').classList.toggle('hidden', type !== 'color');
+            document.getElementById('aiSection').classList.toggle('hidden', type !== 'ai');
             updateSelectionSummary();
         }
 
@@ -810,6 +1084,10 @@
                 dot.style.backgroundImage = 'none';
                 dot.style.backgroundColor = selectedColor;
                 nameEl.textContent = selectedColorName;
+            } else if (controlType === 'ai') {
+                dot.style.backgroundColor = 'transparent';
+                dot.style.backgroundImage = 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)';
+                nameEl.textContent = selectedAiCreation ? selectedAiCreation.name : 'Création IA';
             } else {
                 const movie = currentMovies.find(m => m.id === selectedMovieId);
                 dot.style.backgroundColor = 'transparent';
@@ -826,7 +1104,7 @@
                 }
                 const data = await response.json();
                 currentMovies = data.movies || [];
-                document.getElementById('effectTypeBtn').textContent = `✨ Effets Animés (${currentMovies.length})`;
+                document.getElementById('effectTypeBtn').textContent = `✨ Effets (${currentMovies.length})`;
                 if (selectedMovieId === null && currentMovies.length > 0) {
                     selectedMovieId = currentMovies[0].id;
                 }
@@ -834,6 +1112,152 @@
                 updateSelectionSummary();
             } catch (error) {
                 showStatus('Erreur lors du chargement des effets: ' + error.message, 'error');
+            }
+        }
+
+        const AI_PATTERN_LABELS = {
+            diagonal_45_up: '45° Haut ↗',
+            diagonal_45_down: '45° Bas ↘',
+            downward_wave: 'Descendant ↓',
+            upward_wave: 'Montant ↑',
+            right_to_left: 'Droite → Gauche ←',
+            left_to_right: 'Gauche → Droite →',
+            twinkle: 'Scintillement ✨',
+            pulse_heartbeat: 'Pulsation 💓'
+        };
+
+        function selectAiCreation(creation) {
+            if (!creation) return;
+            selectedAiCreation = creation;
+            const card = document.getElementById('aiResultCard');
+            card.classList.remove('hidden');
+            document.getElementById('aiResultTitle').textContent = creation.name;
+            document.getElementById('aiResultDesc').textContent = creation.description || `« ${creation.prompt} »`;
+            document.getElementById('aiResultBadge').textContent = creation.pinned ? '📌 Épinglé' : 'Prêt à jouer';
+
+            const r = creation.recipe || {};
+            const tagsEl = document.getElementById('aiResultTags');
+            tagsEl.innerHTML = '';
+            const tag1 = document.createElement('span');
+            tag1.className = 'ai-tag';
+            tag1.textContent = `📐 ${AI_PATTERN_LABELS[r.pattern] || r.pattern || '3D'}`;
+            const tag2 = document.createElement('span');
+            tag2.className = 'ai-tag';
+            tag2.textContent = `🎨 ${(r.palette || []).length} couleurs`;
+            const tag3 = document.createElement('span');
+            tag3.className = 'ai-tag';
+            tag3.textContent = `⚡ Vitesse ${r.speed || 1.2}x`;
+            tagsEl.appendChild(tag1);
+            tagsEl.appendChild(tag2);
+            tagsEl.appendChild(tag3);
+
+            renderAiCommunityList();
+            updateSelectionSummary();
+        }
+
+        function renderAiCommunityList() {
+            const wrap = document.getElementById('aiCommunityWrap');
+            const list = document.getElementById('aiCommunityList');
+            if (!aiCreations || aiCreations.length === 0) {
+                wrap.classList.add('hidden');
+                return;
+            }
+            wrap.classList.remove('hidden');
+            list.innerHTML = '';
+
+            aiCreations.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'ai-community-item' + (selectedAiCreation && selectedAiCreation.id === item.id ? ' selected' : '');
+
+                const info = document.createElement('div');
+                info.className = 'ai-community-info';
+
+                const title = document.createElement('div');
+                title.className = 'ai-community-title';
+                title.textContent = `${item.pinned ? '📌 ' : ''}${item.name} — par ${item.author || 'Voisin'}`;
+
+                const sub = document.createElement('div');
+                sub.className = 'ai-community-sub';
+                sub.textContent = `« ${item.prompt} »`;
+
+                info.appendChild(title);
+                info.appendChild(sub);
+
+                const action = document.createElement('span');
+                action.style.fontSize = '11.5px';
+                action.style.fontWeight = '700';
+                action.style.color = '#c084fc';
+                action.style.flexShrink = '0';
+                action.textContent = selectedAiCreation && selectedAiCreation.id === item.id ? '✓ Choisi' : 'Choisir →';
+
+                row.appendChild(info);
+                row.appendChild(action);
+                row.onclick = () => selectAiCreation(item);
+                list.appendChild(row);
+            });
+        }
+
+        async function loadAiCreations() {
+            try {
+                const res = await fetch(`${API_BASE}/ai/creations`);
+                if (!res.ok) return;
+                const data = await res.json();
+                aiCreations = data.creations || [];
+                if (!selectedAiCreation && aiCreations.length > 0) {
+                    selectAiCreation(aiCreations[0]);
+                } else {
+                    renderAiCommunityList();
+                }
+            } catch (_) {}
+        }
+
+        function useAiSuggestion(promptText) {
+            const input = document.getElementById('aiPromptInput');
+            input.value = promptText;
+            document.getElementById('aiCharCount').textContent = `${promptText.length} / 140`;
+            generateAiEffect();
+        }
+
+        document.getElementById('aiPromptInput').addEventListener('input', (e) => {
+            document.getElementById('aiCharCount').textContent = `${e.target.value.length} / 140`;
+        });
+
+        async function generateAiEffect() {
+            const input = document.getElementById('aiPromptInput');
+            const prompt = input.value.trim();
+            if (prompt.length < 3) {
+                showStatus('Décrivez d\'abord l\'effet souhaité (ex: bleu et blanc qui scintille)', 'error');
+                return null;
+            }
+            const nickname = document.getElementById('nickname').value.trim() || 'Voisin';
+            const btn = document.getElementById('aiGenerateBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Création en cours...';
+
+            try {
+                const response = await fetch(`${API_BASE}/ai/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, nickname })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors de la génération IA');
+                }
+                if (Array.isArray(data.creations)) {
+                    aiCreations = data.creations;
+                } else if (data.creation) {
+                    aiCreations.unshift(data.creation);
+                }
+                selectAiCreation(data.creation);
+                showStatus(`✨ Effet « ${data.creation.name} » généré ! Cliquez en bas pour l'envoyer au sapin.`, 'success');
+                return data.creation;
+            } catch (error) {
+                showStatus(error.message, 'error');
+                return null;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✨ Générer l\'effet';
             }
         }
 
@@ -1048,13 +1472,88 @@
             }
         }
 
+        function evalAiRecipeLedPreview(recipe, col, row, cols, rows, t) {
+            const u = col / Math.max(1, cols - 1);
+            const v = row / Math.max(1, rows - 1);
+            const upRow = (rows - 1) - row;
+            const i = row * cols + col;
+            const palette = (recipe && Array.isArray(recipe.palette) && recipe.palette.length > 0)
+                ? recipe.palette
+                : [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
+            const speed = (recipe && Number.isFinite(recipe.speed)) ? recipe.speed : 1.25;
+            const pattern = (recipe && recipe.pattern) || 'diagonal_45_up';
+            const twinkle = (recipe && Number.isFinite(recipe.twinkle)) ? recipe.twinkle : 0.2;
+
+            if (pattern === 'twinkle') {
+                const seed = hash01Preview(i * 9.3 + 2.1);
+                const tw = Math.pow(Math.sin(t * (2.5 + seed * 4) * speed + seed * 30) * 0.5 + 0.5, 2.5);
+                return samplePalettePreview(palette, seed + tw * 0.45);
+            }
+            if (pattern === 'pulse_heartbeat') {
+                const cycle = ((t * speed * 0.75) % 1.2) / 1.2;
+                const b1 = Math.exp(-Math.pow((cycle - 0.18) / 0.07, 2));
+                const b2 = 0.8 * Math.exp(-Math.pow((cycle - 0.38) / 0.09, 2));
+                const p = 0.35 + 0.65 * Math.min(1, b1 + b2);
+                const [cr, cg, cb] = samplePalettePreview(palette, v * 0.5 - t * 0.25 * speed);
+                return [Math.round(cr * p), Math.round(cg * p), Math.round(cb * p)];
+            }
+
+            let phase = 0;
+            switch (pattern) {
+                case 'diagonal_45_up':
+                    phase = (col + upRow) * 0.22 - t * speed * 0.75;
+                    break;
+                case 'diagonal_45_down':
+                    phase = (col + row) * 0.22 - t * speed * 0.75;
+                    break;
+                case 'downward_wave':
+                    phase = v * 0.75 - t * speed * 0.55;
+                    break;
+                case 'upward_wave':
+                    phase = (1 - v) * 0.75 - t * speed * 0.55;
+                    break;
+                case 'right_to_left':
+                    phase = u * 0.9 + t * speed * 0.55;
+                    break;
+                case 'left_to_right':
+                    phase = u * 0.9 - t * speed * 0.55;
+                    break;
+                default:
+                    phase = (col + upRow) * 0.22 - t * speed * 0.75;
+                    break;
+            }
+
+            let [r, g, b] = samplePalettePreview(palette, phase);
+            if (twinkle > 0.05) {
+                const seed = hash01Preview(i * 7.1 + 5.3);
+                const sp = Math.pow(Math.max(0, Math.sin(t * (3.5 + seed * 4) + seed * 20)), 8) * twinkle;
+                r = Math.min(255, Math.round(r + sp * 200));
+                g = Math.min(255, Math.round(g + sp * 200));
+                b = Math.min(255, Math.round(b + sp * 200));
+            }
+            return [r, g, b];
+        }
+
         function animatePreviewCanvases() {
             const t = performance.now() / 1000;
             const cols = 13;
             const rows = 3;
 
-            for (let c = 0; c < activePreviewCanvases.length; c++) {
-                const { canvas, ctx, movie } = activePreviewCanvases[c];
+            const allCanvases = [...activePreviewCanvases];
+            if (selectedAiCreation && selectedAiCreation.recipe) {
+                const aiCanvas = document.getElementById('aiPreviewCanvas');
+                if (aiCanvas) {
+                    allCanvases.push({
+                        canvas: aiCanvas,
+                        ctx: aiCanvas.getContext('2d'),
+                        movie: null,
+                        aiRecipe: selectedAiCreation.recipe
+                    });
+                }
+            }
+
+            for (let c = 0; c < allCanvases.length; c++) {
+                const { canvas, ctx, movie, aiRecipe } = allCanvases[c];
                 const w = canvas.width;
                 const h = canvas.height;
                 ctx.clearRect(0, 0, w, h);
@@ -1066,7 +1565,9 @@
                 for (let row = 0; row < rows; row++) {
                     const cy = cellH * (row + 0.5);
                     for (let col = 0; col < cols; col++) {
-                        const [r, g, b] = evalPreviewLed(movie, col, row, cols, rows, t);
+                        const [r, g, b] = aiRecipe
+                            ? evalAiRecipeLedPreview(aiRecipe, col, row, cols, rows, t)
+                            : evalPreviewLed(movie, col, row, cols, rows, t);
                         const cx = cellW * (col + 0.5);
 
                         // Outer soft LED glow
@@ -1141,7 +1642,21 @@
         async function joinQueue() {
             const nickname = document.getElementById('nickname').value.trim() || 'Anonyme';
 
-            if (controlType === 'effect' && selectedMovieId === null) {
+            let targetType = controlType === 'color' ? 'color' : 'effect';
+            let targetMovieId = selectedMovieId;
+
+            if (controlType === 'ai') {
+                const inputPrompt = document.getElementById('aiPromptInput').value.trim();
+                if (!selectedAiCreation || (inputPrompt.length >= 3 && selectedAiCreation.prompt !== inputPrompt)) {
+                    const created = await generateAiEffect();
+                    if (!created) return;
+                }
+                if (!selectedAiCreation) {
+                    showStatus('Veuillez d\'abord décrire et générer un effet IA !', 'error');
+                    return;
+                }
+                targetMovieId = selectedAiCreation.id;
+            } else if (controlType === 'effect' && selectedMovieId === null) {
                 showStatus('Veuillez d\'abord sélectionner un effet!', 'error');
                 return;
             }
@@ -1151,13 +1666,13 @@
             try {
                 const payload = {
                     nickname,
-                    type: controlType
+                    type: targetType
                 };
 
-                if (controlType === 'color') {
+                if (targetType === 'color') {
                     payload.color = selectedColor;
                 } else {
-                    payload.movieId = selectedMovieId;
+                    payload.movieId = targetMovieId;
                 }
 
                 const response = await fetch(`${API_BASE}/queue/join`, {
@@ -1315,6 +1830,7 @@
 
         renderColorSwatches();
         loadMovies();
+        loadAiCreations();
         updateQueue();
         setInterval(updateQueue, 1000);
     </script>
