@@ -679,7 +679,7 @@
                 </div>
             </div>
 
-            <button type="button" class="btn-submit" onclick="joinQueue()">
+            <button type="button" class="btn-submit" id="submitQueueBtn" onclick="joinQueue()">
                 🚀 Illuminer le Sapin (2 min)
             </button>
         </div>
@@ -920,7 +920,25 @@
                 const liveChoiceText = document.getElementById('liveChoiceText');
                 const liveProgressFill = document.getElementById('liveProgressFill');
 
-                if (data.current) {
+                const submitBtn = document.getElementById('submitQueueBtn');
+
+                if (data.sleeping) {
+                    const wakeTime = (data.schedule && data.schedule.onTime) || '16:30';
+                    liveDot.className = 'pulse-dot idle';
+                    liveUserText.textContent = `🌙 Le sapin se repose pour la nuit — Réouverture à ${wakeTime} !`;
+                    liveTimerText.textContent = '';
+                    liveBottomRow.classList.add('hidden');
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.style.opacity = '0.55';
+                        submitBtn.textContent = `🌙 Sapin en veille jusqu'à ${wakeTime}`;
+                    }
+                } else if (data.current) {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.style.opacity = '1';
+                        submitBtn.textContent = '🚀 Illuminer le Sapin (2 min)';
+                    }
                     const timeLeft = Math.max(0, Math.ceil(data.current.timeRemaining / 1000));
                     const minutes = Math.floor(timeLeft / 60);
                     const seconds = timeLeft % 60;
@@ -948,6 +966,11 @@
                     liveProgressFill.style.width = `${pct}%`;
                     liveBottomRow.classList.remove('hidden');
                 } else {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.style.opacity = '1';
+                        submitBtn.textContent = '🚀 Illuminer le Sapin (2 min)';
+                    }
                     liveDot.className = 'pulse-dot idle';
                     liveUserText.textContent = data.idleEffect && data.idleEffect.movieName
                         ? `Sapin libre (En boucle : ${data.idleEffect.movieName}) — Votre tour démarre immédiatement !`

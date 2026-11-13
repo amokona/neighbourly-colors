@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      - TZ=${TZ:-America/Toronto}
       - TWINKLY_IP=${TWINKLY_IP:-fallback}
       - TWINKLY_IPS=${TWINKLY_IPS:-}
       - ADMIN_USER=${ADMIN_USER:-admin}

@@ -604,6 +604,38 @@
             </div>
         </div>
 
+        <!-- Automatic Night Schedule Panel -->
+        <div class="panel" style="margin-bottom: 24px;">
+            <h2>
+                <span>🌙 Horaires d'Allumage Automatique (Mode Nuit)</span>
+                <span class="badge badge-info" id="scheduleStatusBadge">Désactivé</span>
+            </h2>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
+                Allume automatiquement la playlist du sapin à l'heure de début et éteint les 5 contrôleurs pour la nuit à l'heure de fin (<span id="serverLocalTimeLabel">Heure serveur : --:--</span>).
+            </p>
+
+            <div class="inline-controls" style="justify-content: space-between;">
+                <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
+                    <input type="checkbox" id="scheduleEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markScheduleDirty()">
+                    Activer l'allumage et l'extinction automatiques
+                </label>
+
+                <div class="inline-controls" style="gap: 14px;">
+                    <div class="inline-controls" style="gap: 6px;">
+                        <label for="scheduleOnTime" style="margin:0; font-size:13px;">☀️ Allumer à :</label>
+                        <input type="time" id="scheduleOnTime" class="select-input" value="16:30" onchange="markScheduleDirty()">
+                    </div>
+                    <div class="inline-controls" style="gap: 6px;">
+                        <label for="scheduleOffTime" style="margin:0; font-size:13px;">🌙 Éteindre à :</label>
+                        <input type="time" id="scheduleOffTime" class="select-input" value="23:00" onchange="markScheduleDirty()">
+                    </div>
+                    <button type="button" class="btn btn-primary" id="saveScheduleBtn" onclick="saveScheduleConfig()">
+                        💾 Enregistrer l'Horaire
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Idle Playlist Configuration Panel -->
         <div class="panel" style="margin-bottom: 24px;">
             <h2>
@@ -710,6 +742,8 @@
         let playlistSelectedIds = new Set();
         let playlistInitialized = false;
         let playlistDirty = false;
+        let scheduleInitialized = false;
+        let scheduleDirty = false;
 
         function getHeaders(includeJson = false) {
             const headers = {};
@@ -916,6 +950,34 @@
             }
         }
 
+        function markScheduleDirty() {
+            scheduleDirty = true;
+            const btn = document.getElementById('saveScheduleBtn');
+            if (btn) btn.textContent = '💾 Enregistrer l\'Horaire *';
+        }
+
+        async function saveScheduleConfig() {
+            const enabled = document.getElementById('scheduleEnabledCheckbox').checked;
+            const onTime = document.getElementById('scheduleOnTime').value || '16:30';
+            const offTime = document.getElementById('scheduleOffTime').value || '23:00';
+
+            const res = await fetch(`${API_BASE}/admin/schedule`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ enabled, onTime, offTime })
+            });
+
+            if (res.ok) {
+                scheduleDirty = false;
+                document.getElementById('saveScheduleBtn').textContent = '💾 Enregistrer l\'Horaire';
+                showAlert('Horaire d\'allumage automatique enregistré !', 'success');
+                loadAdminStats();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                showAlert(err.error || 'Erreur lors de la sauvegarde de l\'horaire');
+            }
+        }
+
         async function loadAdminStats() {
             try {
                 const res = await fetch(`${API_BASE}/admin/stats`, {
@@ -941,7 +1003,7 @@
         }
 
         function renderStats(data) {
-            const { summary, topColors, topEffects, idlePlaylist, queueState, logs } = data;
+            const { summary, topColors, topEffects, idlePlaylist, schedule, queueState, logs } = data;
             document.getElementById('statTotalTurns').textContent = summary.totalTurns;
             document.getElementById('statLast24h').textContent = `${summary.turnsLast24h} durant les dernières 24h`;
             document.getElementById('statUniqueVisitors').textContent = summary.uniqueVisitors;
@@ -951,6 +1013,32 @@
             const total = summary.totalTurns || 1;
             document.getElementById('statColorPct').textContent = `${Math.round((summary.colorTurns / total) * 100)}% des choix`;
             document.getElementById('statEffectPct').textContent = `${Math.round((summary.effectTurns / total) * 100)}% des choix`;
+
+            // Automatic Night Schedule status & initial sync
+            if (schedule) {
+                const sBadge = document.getElementById('scheduleStatusBadge');
+                const timeLbl = document.getElementById('serverLocalTimeLabel');
+                if (timeLbl && schedule.serverTime) {
+                    timeLbl.textContent = `Heure locale serveur : ${schedule.serverTime}`;
+                }
+                if (!schedule.enabled) {
+                    sBadge.textContent = 'Désactivé';
+                    sBadge.className = 'badge badge-warn';
+                } else if (schedule.sleeping) {
+                    sBadge.textContent = `🌙 En veille nocturne (jusqu'à ${schedule.onTime})`;
+                    sBadge.className = 'badge badge-info';
+                } else {
+                    sBadge.textContent = `☀️ Plage active (${schedule.onTime} → ${schedule.offTime})`;
+                    sBadge.className = 'badge badge-success';
+                }
+
+                if (!scheduleInitialized || !scheduleDirty) {
+                    scheduleInitialized = true;
+                    document.getElementById('scheduleEnabledCheckbox').checked = Boolean(schedule.enabled);
+                    if (schedule.onTime) document.getElementById('scheduleOnTime').value = schedule.onTime;
+                    if (schedule.offTime) document.getElementById('scheduleOffTime').value = schedule.offTime;
+                }
+            }
 
             // Idle Playlist status & initial sync
             if (idlePlaylist) {

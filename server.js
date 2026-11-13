@@ -92,6 +92,51 @@ const DEFAULT_IDLE_PLAYLIST = {
   ]
 };
 
+const DEFAULT_SCHEDULE = {
+  enabled: false,
+  onTime: '16:30',
+  offTime: '23:00'
+};
+const SCHEDULE_TIMEZONE = process.env.TZ || 'America/Toronto';
+const TIME_HHMM_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function getCurrentTimeHHMM() {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: SCHEDULE_TIMEZONE,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(new Date());
+    const h = parts.find(p => p.type === 'hour')?.value || '00';
+    const m = parts.find(p => p.type === 'minute')?.value || '00';
+    return `${h === '24' ? '00' : h}:${m}`;
+  } catch (_) {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+}
+
+function parseMinutes(hhmm) {
+  const match = TIME_HHMM_REGEX.exec(String(hhmm || ''));
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isWithinActiveHours(schedule) {
+  if (!schedule || !schedule.enabled) return true;
+  const nowMin = parseMinutes(getCurrentTimeHHMM());
+  const onMin = parseMinutes(schedule.onTime || '16:30');
+  const offMin = parseMinutes(schedule.offTime || '23:00');
+  if (onMin === offMin) return true;
+  if (onMin < offMin) {
+    // Same-day window (e.g. 16:30 -> 23:00)
+    return nowMin >= onMin && nowMin < offMin;
+  }
+  // Overnight window crossing midnight (e.g. 16:30 -> 01:00)
+  return nowMin >= onMin || nowMin < offMin;
+}
+
 // Persistent usage stats & logs
 let usageData = {
   startedAt: new Date().toISOString(),
@@ -102,7 +147,8 @@ let usageData = {
   movieCounts: {},
   uniqueIps: [],
   logs: [],
-  idlePlaylist: { ...DEFAULT_IDLE_PLAYLIST }
+  idlePlaylist: { ...DEFAULT_IDLE_PLAYLIST },
+  schedule: { ...DEFAULT_SCHEDULE }
 };
 
 let knownMovies = {
@@ -211,6 +257,7 @@ function loadUsageData() {
       const raw = fs.readFileSync(USAGE_FILE, 'utf8');
       const parsed = JSON.parse(raw);
       const savedPlaylist = parsed.idlePlaylist || {};
+      const savedSchedule = parsed.schedule || {};
       usageData = {
         ...usageData,
         ...parsed,
@@ -226,6 +273,11 @@ function loadUsageData() {
           effects: Array.isArray(savedPlaylist.effects)
             ? savedPlaylist.effects
             : [...DEFAULT_IDLE_PLAYLIST.effects]
+        },
+        schedule: {
+          enabled: typeof savedSchedule.enabled === 'boolean' ? savedSchedule.enabled : DEFAULT_SCHEDULE.enabled,
+          onTime: TIME_HHMM_REGEX.test(savedSchedule.onTime || '') ? savedSchedule.onTime : DEFAULT_SCHEDULE.onTime,
+          offTime: TIME_HHMM_REGEX.test(savedSchedule.offTime || '') ? savedSchedule.offTime : DEFAULT_SCHEDULE.offTime
         }
       };
     }
@@ -413,7 +465,7 @@ app.post('/api/admin/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Queue system & Idle Playlist rotation
+// Queue system, Idle Playlist rotation & Night Schedule
 let queue = [];
 let currentUser = null;
 let currentTimeout = null;
@@ -421,6 +473,7 @@ let queuePaused = false;
 let idleTimer = null;
 let idlePlaylistIndex = 0;
 let currentIdleEffectId = null;
+let isSleepingForNight = false;
 
 function stopIdlePlaylist() {
   if (idleTimer) {
@@ -431,7 +484,7 @@ function stopIdlePlaylist() {
 }
 
 async function runIdlePlaylistStep() {
-  if (currentUser || queue.length > 0) {
+  if (currentUser || queue.length > 0 || isSleepingForNight) {
     stopIdlePlaylist();
     return;
   }
@@ -463,7 +516,7 @@ async function runIdlePlaylistStep() {
     console.error('Error applying idle playlist effect:', error.message);
   }
 
-  if (!currentUser && queue.length === 0 && playlist.enabled && playlist.effects.length > 0) {
+  if (!currentUser && queue.length === 0 && !isSleepingForNight && playlist.enabled && playlist.effects.length > 0) {
     const delayMs = Math.max(15, Number(playlist.intervalSeconds) || 180) * 1000;
     idleTimer = setTimeout(() => {
       runIdlePlaylistStep();
@@ -473,7 +526,55 @@ async function runIdlePlaylistStep() {
 
 async function startIdlePlaylist() {
   stopIdlePlaylist();
+  if (isSleepingForNight) return;
   await runIdlePlaylistStep();
+}
+
+async function evaluateScheduleState(forceApply = false) {
+  const schedule = usageData.schedule || DEFAULT_SCHEDULE;
+  const shouldSleep = Boolean(schedule.enabled) && !isWithinActiveHours(schedule);
+
+  if (shouldSleep && (!isSleepingForNight || forceApply)) {
+    isSleepingForNight = true;
+    if (currentTimeout) {
+      clearTimeout(currentTimeout);
+      currentTimeout = null;
+    }
+    currentUser = null;
+    queue = [];
+    stopIdlePlaylist();
+    effectRunner.stop();
+
+    try {
+      await forAllControllers(async (client) => {
+        await client.setLEDOperationMode({ mode: 'off' });
+      });
+      console.log(`🌙 Night schedule active: tree turned off until ${schedule.onTime}`);
+      addLogEntry({
+        event: 'schedule_off',
+        nickname: 'Système',
+        status: 'info',
+        details: `Extinction nocturne automatique (réouverture à ${schedule.onTime})`
+      });
+    } catch (err) {
+      console.error('Error turning off tree for night schedule:', err.message);
+    }
+  } else if (!shouldSleep && (isSleepingForNight || forceApply)) {
+    const wasSleeping = isSleepingForNight;
+    isSleepingForNight = false;
+    if (wasSleeping) {
+      console.log(`☀️ Active hours started (${schedule.onTime}): waking up tree`);
+      addLogEntry({
+        event: 'schedule_on',
+        nickname: 'Système',
+        status: 'info',
+        details: `Allumage automatique programmé (${schedule.onTime})`
+      });
+    }
+    if (!currentUser && queue.length === 0) {
+      await startIdlePlaylist();
+    }
+  }
 }
 
 // Process next person in queue
@@ -809,6 +910,7 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
     }
 
     const playlist = usageData.idlePlaylist || DEFAULT_IDLE_PLAYLIST;
+    const schedule = usageData.schedule || DEFAULT_SCHEDULE;
 
     res.json({
       summary: {
@@ -825,9 +927,17 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
         enabled: Boolean(playlist.enabled),
         intervalSeconds: Number(playlist.intervalSeconds) || 180,
         effects: Array.isArray(playlist.effects) ? playlist.effects : [],
-        active: !currentUser && Boolean(playlist.enabled) && currentIdleEffectId !== null,
+        active: !currentUser && !isSleepingForNight && Boolean(playlist.enabled) && currentIdleEffectId !== null,
         currentEffectId: currentIdleEffectId,
         currentEffectName: currentIdleEffectId !== null ? (knownMovies[currentIdleEffectId] || `Effet #${currentIdleEffectId}`) : null
+      },
+      schedule: {
+        enabled: Boolean(schedule.enabled),
+        onTime: schedule.onTime || '16:30',
+        offTime: schedule.offTime || '23:00',
+        sleeping: isSleepingForNight,
+        serverTime: getCurrentTimeHHMM(),
+        timezone: SCHEDULE_TIMEZONE
       },
       queueState: {
         paused: queuePaused,
@@ -842,6 +952,54 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
     });
   } catch (error) {
     console.error('Error getting admin stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Configure Automatic On/Off Night Schedule (admin only)
+app.post('/api/admin/schedule', requireAdmin, async (req, res) => {
+  try {
+    const { enabled, onTime, offTime } = req.body || {};
+
+    const cleanEnabled = typeof enabled === 'boolean'
+      ? enabled
+      : Boolean(usageData.schedule?.enabled);
+
+    const cleanOnTime = TIME_HHMM_REGEX.test(String(onTime || ''))
+      ? String(onTime)
+      : (usageData.schedule?.onTime || '16:30');
+
+    const cleanOffTime = TIME_HHMM_REGEX.test(String(offTime || ''))
+      ? String(offTime)
+      : (usageData.schedule?.offTime || '23:00');
+
+    usageData.schedule = {
+      enabled: cleanEnabled,
+      onTime: cleanOnTime,
+      offTime: cleanOffTime
+    };
+    saveUsageData();
+
+    addLogEntry({
+      event: 'admin_action',
+      nickname: ADMIN_USER,
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: `Horaire automatique mis à jour (${cleanEnabled ? `Activé : ${cleanOnTime} → ${cleanOffTime}` : 'Désactivé'})`
+    });
+
+    await evaluateScheduleState(true);
+
+    res.json({
+      success: true,
+      schedule: {
+        ...usageData.schedule,
+        sleeping: isSleepingForNight,
+        serverTime: getCurrentTimeHHMM()
+      }
+    });
+  } catch (error) {
+    console.error('Error saving schedule:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1032,6 +1190,13 @@ app.post('/api/admin/logs/clear', requireAdmin, (req, res) => {
 // Queue endpoints
 app.post('/api/queue/join', async (req, res) => {
   try {
+    if (isSleepingForNight) {
+      const onTime = usageData.schedule?.onTime || '16:30';
+      return res.status(403).json({
+        error: `🌙 Le sapin se repose pour la nuit ! Il se rallumera automatiquement à ${onTime}.`
+      });
+    }
+
     if (queuePaused) {
       return res.status(403).json({ error: 'La file d\'attente est temporairement fermée par l\'administrateur.' });
     }
@@ -1140,10 +1305,18 @@ app.get('/api/queue/status', (req, res) => {
       };
     }
 
+    const schedule = usageData.schedule || DEFAULT_SCHEDULE;
+
     res.json({
       paused: queuePaused,
+      sleeping: isSleepingForNight,
+      schedule: {
+        enabled: Boolean(schedule.enabled),
+        onTime: schedule.onTime || '16:30',
+        offTime: schedule.offTime || '23:00'
+      },
       current,
-      idleEffect: (!current && currentIdleEffectId !== null)
+      idleEffect: (!current && !isSleepingForNight && currentIdleEffectId !== null)
         ? {
             movieId: currentIdleEffectId,
             movieName: knownMovies[currentIdleEffectId] || null
@@ -1170,10 +1343,13 @@ app.listen(PORT, () => {
   console.log(`Tableau de bord Admin: http://localhost:${PORT}/admin`);
   console.log(`API disponible à http://localhost:${PORT}/api`);
 
-  // Start the idle playlist shortly after boot if the queue is empty
-  setTimeout(() => {
-    if (!currentUser && queue.length === 0) {
-      startIdlePlaylist().catch(err => console.error('Initial idle playlist error:', err.message));
-    }
+  // Evaluate schedule and start idle playlist shortly after boot
+  setTimeout(async () => {
+    await evaluateScheduleState(true);
   }, 1500);
+
+  // Check night/day schedule every 20 seconds
+  setInterval(() => {
+    evaluateScheduleState(false).catch(err => console.error('Schedule check error:', err.message));
+  }, 20000);
 });
