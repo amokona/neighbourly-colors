@@ -180,8 +180,8 @@ function getDeviceMovieMeta(rawName = '', id = 0) {
   if (n.includes('rotor')) {
     return {
       name: 'Hélice Lumineuse',
-      description: 'Colonnes de couleurs tournant autour du sapin',
-      preview: 'linear-gradient(135deg, #ec4899, #6366f1, #06b6d4)'
+      description: 'Pales verticales rouge, vert, bleu et or tournant autour du sapin',
+      preview: 'repeating-linear-gradient(90deg, #ef4444 0%, #ef4444 25%, #22c55e 25%, #22c55e 50%, #3b82f6 50%, #3b82f6 75%, #eab308 75%, #eab308 100%)'
     };
   }
   if (n === 'snow' || n.includes('snow')) {
@@ -223,7 +223,7 @@ function getDeviceMovieMeta(rawName = '', id = 0) {
     return {
       name: 'Vagues Diagonales',
       description: 'Bandes colorées glissant en diagonale sur le sapin',
-      preview: 'linear-gradient(135deg, #10b981, #3b82f6, #8b5cf6)'
+      preview: 'repeating-linear-gradient(135deg, #ef4444 0px, #ef4444 10px, #f59e0b 10px, #f59e0b 20px, #10b981 20px, #10b981 30px, #3b82f6 30px, #3b82f6 40px)'
     };
   }
   if (n.includes('vintage')) {
