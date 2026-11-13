@@ -165,7 +165,9 @@ const VALID_AI_PATTERNS = new Set([
   'right_to_left',
   'left_to_right',
   'twinkle',
-  'pulse_heartbeat'
+  'pulse_heartbeat',
+  'burst_fade',
+  'static'
 ]);
 
 function isAiEffectId(id) {
@@ -192,6 +194,15 @@ function sanitizeAiRecipe(raw, fallbackPrompt = '') {
   const sharpness = Number.isFinite(Number(raw?.sharpness))
     ? Math.max(0, Math.min(1, Number(raw.sharpness)))
     : 0.25;
+  const cycleSeconds = Number.isFinite(Number(raw?.cycleSeconds))
+    ? Math.max(1.0, Math.min(30.0, Number(raw.cycleSeconds)))
+    : 4.0;
+  const fadeSeconds = Number.isFinite(Number(raw?.fadeSeconds))
+    ? Math.max(0.2, Math.min(cycleSeconds, Number(raw.fadeSeconds)))
+    : Math.round(cycleSeconds * 0.7 * 10) / 10;
+  const minBrightness = Number.isFinite(Number(raw?.minBrightness))
+    ? Math.max(0, Math.min(0.8, Number(raw.minBrightness)))
+    : 0.0;
 
   let palette = [];
   if (Array.isArray(raw?.palette)) {
@@ -207,8 +218,6 @@ function sanitizeAiRecipe(raw, fallbackPrompt = '') {
   }
   if (palette.length === 0) {
     palette = [[99, 102, 241], [236, 72, 153], [250, 204, 21]];
-  } else if (palette.length === 1) {
-    palette.push([255, 255, 255]);
   }
 
   return {
@@ -219,6 +228,9 @@ function sanitizeAiRecipe(raw, fallbackPrompt = '') {
     scale: Math.round(scale * 100) / 100,
     twinkle: Math.round(twinkle * 100) / 100,
     sharpness: Math.round(sharpness * 100) / 100,
+    cycleSeconds: Math.round(cycleSeconds * 10) / 10,
+    fadeSeconds: Math.round(fadeSeconds * 10) / 10,
+    minBrightness: Math.round(minBrightness * 100) / 100,
     palette
   };
 }
@@ -348,11 +360,16 @@ Convertis la description de l'utilisateur en un objet JSON strict avec les propr
   - "left_to_right" (couleurs tournant de gauche à droite)
   - "twinkle" (scintillement d'étoiles sur tout le sapin)
   - "pulse_heartbeat" (pulsation rythmique sur tout le sapin)
-- "palette": Tableau de 2 à 5 couleurs au format [R, G, B] (entiers de 0 à 255) correspondant exactement aux couleurs demandées.
+  - "burst_fade" (tout le sapin s'allume d'un coup, puis s'éteint progressivement jusqu'au noir complet, idéal pour éclats/flashs/respirations qui s'éteignent)
+  - "static" (tout le sapin reste fixe sans défiler)
+- "palette": Tableau de 1 à 5 couleurs au format [R, G, B] (entiers de 0 à 255) correspondant exactement aux couleurs demandées (ne rajoute pas de blanc si une seule couleur est demandée).
 - "speed": Nombre entre 0.5 (très lent) et 2.4 (très rapide), défaut 1.3.
 - "scale": Nombre entre 1.2 (larges vagues) et 4.5 (rayures serrées), défaut 2.6.
 - "twinkle": Nombre entre 0.0 (aucun scintillement) et 1.0 (scintillement intense).
-- "sharpness": Nombre entre 0.0 (dégradé doux) et 0.9 (rayures franches et nettes).`;
+- "sharpness": Nombre entre 0.0 (dégradé doux) et 0.9 (rayures franches et nettes).
+- "cycleSeconds": Durée totale d'un cycle en secondes (1.0 à 30.0) pour "burst_fade" (ex: "every 10 seconds" -> 10).
+- "fadeSeconds": Durée de l'extinction en secondes (0.2 à cycleSeconds) pour "burst_fade" (ex: "takes 7 seconds to die down" -> 7).
+- "minBrightness": Luminosité minimale entre 0.0 (extinction complète / noir total) et 0.8 (lueur résiduelle). Utilise 0.0 si l'utilisateur demande d'éteindre ou de disparaître.`;
 
   const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
 

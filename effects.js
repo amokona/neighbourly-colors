@@ -179,15 +179,68 @@ function evaluateAiRecipe(recipe, led, t) {
   const scale = Number.isFinite(recipe.scale) ? Math.max(0.8, Math.min(6.0, recipe.scale)) : 2.5;
   const twinkle = Number.isFinite(recipe.twinkle) ? Math.max(0, Math.min(1, recipe.twinkle)) : 0.2;
   const sharpness = Number.isFinite(recipe.sharpness) ? Math.max(0, Math.min(1, recipe.sharpness)) : 0.2;
+  const cycleSeconds = Number.isFinite(recipe.cycleSeconds) ? Math.max(1.0, Math.min(30.0, recipe.cycleSeconds)) : 4.0;
+  const fadeSeconds = Number.isFinite(recipe.fadeSeconds) ? Math.max(0.2, Math.min(cycleSeconds, recipe.fadeSeconds)) : cycleSeconds * 0.7;
+  const minBrightness = Number.isFinite(recipe.minBrightness) ? Math.max(0, Math.min(0.8, recipe.minBrightness)) : 0.0;
   const pattern = recipe.pattern || 'diagonal_45_up';
 
   let r = 0, g = 0, b = 0, w = 0;
+
+  if (pattern === 'burst_fade') {
+    const cycleIndex = Math.floor(t / cycleSeconds);
+    const localT = t % cycleSeconds;
+    let level = minBrightness;
+
+    if (localT < fadeSeconds) {
+      const attack = Math.min(0.2, fadeSeconds * 0.1);
+      if (localT < attack) {
+        level = minBrightness + (1 - minBrightness) * (localT / attack);
+      } else {
+        const decayProgress = (localT - attack) / Math.max(0.05, fadeSeconds - attack);
+        // Smooth exponential-like fade down to minBrightness (0 = completely off)
+        const curve = Math.pow(Math.max(0, 1 - decayProgress), 1.8);
+        level = minBrightness + (1 - minBrightness) * curve;
+      }
+    }
+
+    const [pr, pg, pb] = palette[cycleIndex % palette.length];
+    r = Math.round(pr * level);
+    g = Math.round(pg * level);
+    b = Math.round(pb * level);
+    if (twinkle > 0.05 && level > 0.05) {
+      const seed = hash01(index * 7.3 + 5.1);
+      const sp = Math.pow(Math.max(0, Math.sin(t * (3.2 + seed * 4.0) + seed * 30.0)), 8) * twinkle * level;
+      w = Math.round(sp * 200);
+      r = Math.min(255, Math.round(r + sp * 150));
+      g = Math.min(255, Math.round(g + sp * 150));
+      b = Math.min(255, Math.round(b + sp * 150));
+    }
+    return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+  }
+
+  if (pattern === 'static') {
+    const [pr, pg, pb] = palette.length === 1
+      ? palette[0]
+      : samplePaletteRgb(palette, y, sharpness);
+    r = pr;
+    g = pg;
+    b = pb;
+    if (twinkle > 0.05) {
+      const seed = hash01(index * 7.3 + 5.1);
+      const sp = Math.pow(Math.max(0, Math.sin(t * (3.2 + seed * 4.0) + seed * 30.0)), 8) * twinkle;
+      w = Math.round(sp * 200);
+      r = Math.min(255, Math.round(r + sp * 150));
+      g = Math.min(255, Math.round(g + sp * 150));
+      b = Math.min(255, Math.round(b + sp * 150));
+    }
+    return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
+  }
 
   if (pattern === 'twinkle') {
     const seed = hash01(index * 9.1 + 3.7);
     const wave = Math.sin(t * (2.2 + seed * 3.8) * speed + seed * 40.0) * 0.5 + 0.5;
     const [pr, pg, pb] = samplePaletteRgb(palette, seed + wave * 0.5, sharpness);
-    const bright = 0.35 + 0.65 * Math.pow(wave, 2.2);
+    const bright = minBrightness + (1 - minBrightness) * Math.pow(wave, 2.2);
     r = Math.round(pr * bright);
     g = Math.round(pg * bright);
     b = Math.round(pb * bright);
@@ -200,12 +253,14 @@ function evaluateAiRecipe(recipe, led, t) {
     const b1 = Math.exp(-Math.pow((cycle - 0.18) / 0.07, 2));
     const b2 = 0.8 * Math.exp(-Math.pow((cycle - 0.38) / 0.09, 2));
     const pulse = Math.min(1, b1 + b2);
-    const [pr, pg, pb] = samplePaletteRgb(palette, y * 0.5 - t * 0.2 * speed, 0);
-    const factor = 0.35 + 0.65 * pulse;
+    const [pr, pg, pb] = palette.length === 1
+      ? palette[0]
+      : samplePaletteRgb(palette, y * 0.5 - t * 0.2 * speed, 0);
+    const factor = minBrightness + (1 - minBrightness) * pulse;
     r = Math.round(pr * factor);
     g = Math.round(pg * factor);
     b = Math.round(pb * factor);
-    w = Math.round(pulse * 120 * twinkle);
+    w = Math.round(pulse * 120 * twinkle * factor);
     return [Math.min(255, w), Math.min(255, r), Math.min(255, g), Math.min(255, b)];
   }
 

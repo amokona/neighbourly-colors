@@ -1123,7 +1123,9 @@
             right_to_left: 'Droite → Gauche ←',
             left_to_right: 'Gauche → Droite →',
             twinkle: 'Scintillement ✨',
-            pulse_heartbeat: 'Pulsation 💓'
+            pulse_heartbeat: 'Pulsation 💓',
+            burst_fade: 'Éclat & Extinction 💥',
+            static: 'Fixe 🎄'
         };
 
         function selectAiCreation(creation) {
@@ -1485,7 +1487,29 @@
             const speed = (recipe && Number.isFinite(recipe.speed)) ? recipe.speed : 1.25;
             const pattern = (recipe && recipe.pattern) || 'diagonal_45_up';
             const twinkle = (recipe && Number.isFinite(recipe.twinkle)) ? recipe.twinkle : 0.2;
+            const cycleSeconds = (recipe && Number.isFinite(recipe.cycleSeconds)) ? Math.max(1, recipe.cycleSeconds) : 4.0;
+            const fadeSeconds = (recipe && Number.isFinite(recipe.fadeSeconds)) ? Math.max(0.2, Math.min(cycleSeconds, recipe.fadeSeconds)) : cycleSeconds * 0.7;
+            const minBrightness = (recipe && Number.isFinite(recipe.minBrightness)) ? Math.max(0, Math.min(0.8, recipe.minBrightness)) : 0.0;
 
+            if (pattern === 'burst_fade') {
+                const cycleIndex = Math.floor(t / cycleSeconds);
+                const localT = t % cycleSeconds;
+                let level = minBrightness;
+                if (localT < fadeSeconds) {
+                    const attack = Math.min(0.2, fadeSeconds * 0.1);
+                    if (localT < attack) {
+                        level = minBrightness + (1 - minBrightness) * (localT / attack);
+                    } else {
+                        const decay = (localT - attack) / Math.max(0.05, fadeSeconds - attack);
+                        level = minBrightness + (1 - minBrightness) * Math.pow(Math.max(0, 1 - decay), 1.8);
+                    }
+                }
+                const [pr, pg, pb] = palette[cycleIndex % palette.length];
+                return [Math.round(pr * level), Math.round(pg * level), Math.round(pb * level)];
+            }
+            if (pattern === 'static') {
+                return palette.length === 1 ? palette[0] : samplePalettePreview(palette, v);
+            }
             if (pattern === 'twinkle') {
                 const seed = hash01Preview(i * 9.3 + 2.1);
                 const tw = Math.pow(Math.sin(t * (2.5 + seed * 4) * speed + seed * 30) * 0.5 + 0.5, 2.5);
@@ -1495,8 +1519,8 @@
                 const cycle = ((t * speed * 0.75) % 1.2) / 1.2;
                 const b1 = Math.exp(-Math.pow((cycle - 0.18) / 0.07, 2));
                 const b2 = 0.8 * Math.exp(-Math.pow((cycle - 0.38) / 0.09, 2));
-                const p = 0.35 + 0.65 * Math.min(1, b1 + b2);
-                const [cr, cg, cb] = samplePalettePreview(palette, v * 0.5 - t * 0.25 * speed);
+                const p = minBrightness + (1 - minBrightness) * Math.min(1, b1 + b2);
+                const [cr, cg, cb] = palette.length === 1 ? palette[0] : samplePalettePreview(palette, v * 0.5 - t * 0.25 * speed);
                 return [Math.round(cr * p), Math.round(cg * p), Math.round(cb * p)];
             }
 
