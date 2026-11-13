@@ -173,71 +173,71 @@ function getDeviceMovieMeta(rawName = '', id = 0) {
   if (n.includes('snowfall')) {
     return {
       name: 'Chute de Neige Étincelante',
-      description: 'Flocons scintillants tombant doucement sur le sapin',
-      preview: 'linear-gradient(135deg, #0369a1, #7dd3fc, #ffffff)'
+      description: 'Scintillement bleu et blanc glacé sur tout le sapin',
+      preview: 'linear-gradient(135deg, #1d4ed8, #38bdf8, #ffffff)'
     };
   }
   if (n.includes('rotor')) {
     return {
       name: 'Hélice Lumineuse',
-      description: 'Pales verticales rouge, vert, bleu et or tournant autour du sapin',
-      preview: 'repeating-linear-gradient(90deg, #ef4444 0%, #ef4444 25%, #22c55e 25%, #22c55e 50%, #3b82f6 50%, #3b82f6 75%, #eab308 75%, #eab308 100%)'
+      description: 'Colonnes rouges et blanches tournant autour du sapin',
+      preview: 'repeating-linear-gradient(90deg, #ef4444 0%, #ef4444 50%, #ffffff 50%, #ffffff 100%)'
     };
   }
   if (n === 'snow' || n.includes('snow')) {
     return {
       name: 'Neige d\'Hiver',
-      description: 'Tombée de neige blanche et bleue apaisante',
-      preview: 'linear-gradient(135deg, #0284c7, #bae6fd, #ffffff)'
+      description: 'Flocons blancs purs descendant doucement sur le sapin',
+      preview: 'linear-gradient(180deg, #ffffff, #cbd5e1, #0f172a)'
     };
   }
   if (n.includes('rainbow')) {
     return {
       name: 'Arc-en-Ciel',
-      description: 'Dégradé fluide de toutes les couleurs de l\'arc-en-ciel',
-      preview: 'linear-gradient(135deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)'
+      description: 'Couleurs de l\'arc-en-ciel descendant sur tout le sapin',
+      preview: 'linear-gradient(180deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)'
     };
   }
   if (n.includes('twinkle')) {
     return {
       name: 'Scintillement Vif',
-      description: 'Étoiles lumineuses clignotant avec éclat sur tout le sapin',
-      preview: 'linear-gradient(135deg, #1e3a8a, #fbbf24, #ffffff)'
+      description: 'Étoiles blanches et violettes clignotant avec éclat',
+      preview: 'linear-gradient(135deg, #6b21a8, #a855f7, #ffffff)'
     };
   }
   if (n.includes('candy')) {
     return {
       name: 'Sucre d\'Orge',
-      description: 'Rayures festives rouges et blanches',
+      description: 'Rayures rouges et blanches montant à 45° sur le sapin',
       preview: 'repeating-linear-gradient(45deg, #ef4444 0px, #ef4444 10px, #ffffff 10px, #ffffff 20px)'
     };
   }
   if (n.includes('sunset')) {
     return {
       name: 'Coucher de Soleil',
-      description: 'Dégradé chaleureux d\'orange, rose et pourpre',
-      preview: 'linear-gradient(135deg, #7c2d12, #ea580c, #facc15)'
+      description: 'Vagues rouge, orange et jaune glissant de droite à gauche',
+      preview: 'linear-gradient(270deg, #ef4444, #f97316, #facc15)'
     };
   }
   if (n.includes('diagonal')) {
     return {
       name: 'Vagues Diagonales',
-      description: 'Bandes colorées glissant en diagonale sur le sapin',
-      preview: 'repeating-linear-gradient(135deg, #ef4444 0px, #ef4444 10px, #f59e0b 10px, #f59e0b 20px, #10b981 20px, #10b981 30px, #3b82f6 30px, #3b82f6 40px)'
+      description: 'Bandes blanches et bleues montant en diagonale à 45°',
+      preview: 'repeating-linear-gradient(45deg, #2563eb 0px, #2563eb 10px, #ffffff 10px, #ffffff 20px)'
     };
   }
   if (n.includes('vintage')) {
     return {
       name: 'Noël Vintage',
-      description: 'Lumières rétro aux tons chauds et dorés',
-      preview: 'linear-gradient(135deg, #78350f, #d97706, #fef3c7)'
+      description: 'Lumières blanc très chaud et ambre scintillant doucement',
+      preview: 'linear-gradient(135deg, #92400e, #f59e0b, #fef3c7)'
     };
   }
   if (n.includes('slow wave') || n.includes('wave')) {
     return {
       name: 'Vague Douce',
-      description: 'Ondulation lente et relaxante de couleurs',
-      preview: 'linear-gradient(135deg, #312e81, #4f46e5, #38bdf8)'
+      description: 'Ondulation jaune, rouge et violette descendant sur le sapin',
+      preview: 'linear-gradient(180deg, #facc15, #ef4444, #9333ea)'
     };
   }
 
