@@ -604,34 +604,69 @@
             </div>
         </div>
 
-        <!-- Automatic Night Schedule Panel -->
+        <!-- Automatic Schedules Panel -->
         <div class="panel" style="margin-bottom: 24px;">
             <h2>
-                <span>🌙 Horaires d'Allumage Automatique (Mode Nuit)</span>
-                <span class="badge badge-info" id="scheduleStatusBadge">Désactivé</span>
+                <span>🕒 Horaires Automatiques (Playlist &amp; Contrôle Public)</span>
+                <span class="badge badge-info" id="serverLocalTimeLabel" style="font-weight: 600;">Heure serveur : --:--</span>
             </h2>
             <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
-                Allume automatiquement la playlist du sapin à l'heure de début et éteint les 5 contrôleurs pour la nuit à l'heure de fin (<span id="serverLocalTimeLabel">Heure serveur : --:--</span>).
+                Configurez séparément quand la <strong>playlist automatique</strong> allume/éteint le sapin et quand les <strong>voisins</strong> sont autorisés à contrôler les lumières.
             </p>
 
-            <div class="inline-controls" style="justify-content: space-between;">
-                <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
-                    <input type="checkbox" id="scheduleEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markScheduleDirty()">
-                    Activer l'allumage et l'extinction automatiques
-                </label>
+            <!-- 1. Playlist / Tree Power Schedule -->
+            <div style="padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">🔁 Playlist Automatique (Allumage &amp; Extinction du Sapin)</div>
+                    <span class="badge badge-info" id="scheduleStatusBadge">Désactivé</span>
+                </div>
+                <div class="inline-controls" style="justify-content: space-between;">
+                    <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
+                        <input type="checkbox" id="scheduleEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markScheduleDirty()">
+                        Allumer et éteindre la playlist automatiquement
+                    </label>
 
-                <div class="inline-controls" style="gap: 14px;">
-                    <div class="inline-controls" style="gap: 6px;">
-                        <label for="scheduleOnTime" style="margin:0; font-size:13px;">☀️ Allumer à :</label>
-                        <input type="time" id="scheduleOnTime" class="select-input" value="16:30" onchange="markScheduleDirty()">
+                    <div class="inline-controls" style="gap: 14px;">
+                        <div class="inline-controls" style="gap: 6px;">
+                            <label for="scheduleOnTime" style="margin:0; font-size:13px;">☀️ Allumer à :</label>
+                            <input type="time" id="scheduleOnTime" class="select-input" value="16:30" onchange="markScheduleDirty()">
+                        </div>
+                        <div class="inline-controls" style="gap: 6px;">
+                            <label for="scheduleOffTime" style="margin:0; font-size:13px;">🌙 Éteindre à :</label>
+                            <input type="time" id="scheduleOffTime" class="select-input" value="23:00" onchange="markScheduleDirty()">
+                        </div>
+                        <button type="button" class="btn btn-primary" id="saveScheduleBtn" onclick="saveScheduleConfig()">
+                            💾 Enregistrer
+                        </button>
                     </div>
-                    <div class="inline-controls" style="gap: 6px;">
-                        <label for="scheduleOffTime" style="margin:0; font-size:13px;">🌙 Éteindre à :</label>
-                        <input type="time" id="scheduleOffTime" class="select-input" value="23:00" onchange="markScheduleDirty()">
+                </div>
+            </div>
+
+            <!-- 2. Public Control Schedule -->
+            <div style="padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">🙋 Contrôle Public des Lumières (File d'Attente Voisins)</div>
+                    <span class="badge badge-info" id="controlScheduleStatusBadge">Toujours ouvert</span>
+                </div>
+                <div class="inline-controls" style="justify-content: space-between;">
+                    <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:14px; color:#1e293b; cursor:pointer;">
+                        <input type="checkbox" id="controlScheduleEnabledCheckbox" style="width:18px; height:18px; cursor:pointer;" onchange="markControlScheduleDirty()">
+                        Limiter les heures où les voisins peuvent contrôler
+                    </label>
+
+                    <div class="inline-controls" style="gap: 14px;">
+                        <div class="inline-controls" style="gap: 6px;">
+                            <label for="controlScheduleStartTime" style="margin:0; font-size:13px;">🟢 Ouvrir à :</label>
+                            <input type="time" id="controlScheduleStartTime" class="select-input" value="16:30" onchange="markControlScheduleDirty()">
+                        </div>
+                        <div class="inline-controls" style="gap: 6px;">
+                            <label for="controlScheduleEndTime" style="margin:0; font-size:13px;">🔴 Fermer à :</label>
+                            <input type="time" id="controlScheduleEndTime" class="select-input" value="22:00" onchange="markControlScheduleDirty()">
+                        </div>
+                        <button type="button" class="btn btn-primary" id="saveControlScheduleBtn" onclick="saveControlScheduleConfig()">
+                            💾 Enregistrer
+                        </button>
                     </div>
-                    <button type="button" class="btn btn-primary" id="saveScheduleBtn" onclick="saveScheduleConfig()">
-                        💾 Enregistrer l'Horaire
-                    </button>
                 </div>
             </div>
         </div>
@@ -772,6 +807,8 @@
         let playlistDirty = false;
         let scheduleInitialized = false;
         let scheduleDirty = false;
+        let controlScheduleInitialized = false;
+        let controlScheduleDirty = false;
 
         function getHeaders(includeJson = false) {
             const headers = {};
@@ -981,7 +1018,7 @@
         function markScheduleDirty() {
             scheduleDirty = true;
             const btn = document.getElementById('saveScheduleBtn');
-            if (btn) btn.textContent = '💾 Enregistrer l\'Horaire *';
+            if (btn) btn.textContent = '💾 Enregistrer *';
         }
 
         async function saveScheduleConfig() {
@@ -997,12 +1034,40 @@
 
             if (res.ok) {
                 scheduleDirty = false;
-                document.getElementById('saveScheduleBtn').textContent = '💾 Enregistrer l\'Horaire';
-                showAlert('Horaire d\'allumage automatique enregistré !', 'success');
+                document.getElementById('saveScheduleBtn').textContent = '💾 Enregistrer';
+                showAlert('Horaire de la playlist enregistré !', 'success');
                 loadAdminStats();
             } else {
                 const err = await res.json().catch(() => ({}));
                 showAlert(err.error || 'Erreur lors de la sauvegarde de l\'horaire');
+            }
+        }
+
+        function markControlScheduleDirty() {
+            controlScheduleDirty = true;
+            const btn = document.getElementById('saveControlScheduleBtn');
+            if (btn) btn.textContent = '💾 Enregistrer *';
+        }
+
+        async function saveControlScheduleConfig() {
+            const enabled = document.getElementById('controlScheduleEnabledCheckbox').checked;
+            const startTime = document.getElementById('controlScheduleStartTime').value || '16:30';
+            const endTime = document.getElementById('controlScheduleEndTime').value || '22:00';
+
+            const res = await fetch(`${API_BASE}/admin/control-schedule`, {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ enabled, startTime, endTime })
+            });
+
+            if (res.ok) {
+                controlScheduleDirty = false;
+                document.getElementById('saveControlScheduleBtn').textContent = '💾 Enregistrer';
+                showAlert('Horaire du contrôle public enregistré !', 'success');
+                loadAdminStats();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                showAlert(err.error || 'Erreur lors de la sauvegarde de l\'horaire du contrôle');
             }
         }
 
@@ -1071,7 +1136,7 @@
         }
 
         function renderStats(data) {
-            const { summary, topColors, topEffects, idlePlaylist, schedule, aiConfig, queueState, logs } = data;
+            const { summary, topColors, topEffects, idlePlaylist, schedule, controlSchedule, aiConfig, queueState, logs } = data;
             document.getElementById('statTotalTurns').textContent = summary.totalTurns;
             document.getElementById('statLast24h').textContent = `${summary.turnsLast24h} durant les dernières 24h`;
             document.getElementById('statUniqueVisitors').textContent = summary.uniqueVisitors;
@@ -1160,18 +1225,18 @@
                 }
             }
 
-            // Automatic Night Schedule status & initial sync
+            // Automatic Playlist Schedule status & initial sync
             if (schedule) {
                 const sBadge = document.getElementById('scheduleStatusBadge');
                 const timeLbl = document.getElementById('serverLocalTimeLabel');
                 if (timeLbl && schedule.serverTime) {
-                    timeLbl.textContent = `Heure locale serveur : ${schedule.serverTime}`;
+                    timeLbl.textContent = `Heure serveur : ${schedule.serverTime}`;
                 }
                 if (!schedule.enabled) {
-                    sBadge.textContent = 'Désactivé';
+                    sBadge.textContent = 'Désactivé (toujours allumé)';
                     sBadge.className = 'badge badge-warn';
                 } else if (schedule.sleeping) {
-                    sBadge.textContent = `🌙 En veille nocturne (jusqu'à ${schedule.onTime})`;
+                    sBadge.textContent = `🌙 Éteint (allumage à ${schedule.onTime})`;
                     sBadge.className = 'badge badge-info';
                 } else {
                     sBadge.textContent = `☀️ Plage active (${schedule.onTime} → ${schedule.offTime})`;
@@ -1183,6 +1248,28 @@
                     document.getElementById('scheduleEnabledCheckbox').checked = Boolean(schedule.enabled);
                     if (schedule.onTime) document.getElementById('scheduleOnTime').value = schedule.onTime;
                     if (schedule.offTime) document.getElementById('scheduleOffTime').value = schedule.offTime;
+                }
+            }
+
+            // Public Light Control Schedule status & initial sync
+            if (controlSchedule) {
+                const cBadge = document.getElementById('controlScheduleStatusBadge');
+                if (!controlSchedule.enabled) {
+                    cBadge.textContent = 'Toujours ouvert';
+                    cBadge.className = 'badge badge-warn';
+                } else if (controlSchedule.closed) {
+                    cBadge.textContent = `🔴 Fermé (ouvre à ${controlSchedule.startTime})`;
+                    cBadge.className = 'badge badge-info';
+                } else {
+                    cBadge.textContent = `🟢 Ouvert (${controlSchedule.startTime} → ${controlSchedule.endTime})`;
+                    cBadge.className = 'badge badge-success';
+                }
+
+                if (!controlScheduleInitialized || !controlScheduleDirty) {
+                    controlScheduleInitialized = true;
+                    document.getElementById('controlScheduleEnabledCheckbox').checked = Boolean(controlSchedule.enabled);
+                    if (controlSchedule.startTime) document.getElementById('controlScheduleStartTime').value = controlSchedule.startTime;
+                    if (controlSchedule.endTime) document.getElementById('controlScheduleEndTime').value = controlSchedule.endTime;
                 }
             }
 

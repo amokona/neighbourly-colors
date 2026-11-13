@@ -1823,24 +1823,22 @@
                 const liveProgressFill = document.getElementById('liveProgressFill');
 
                 const submitBtn = document.getElementById('submitQueueBtn');
+                const openTime = (data.controlSchedule && data.controlSchedule.startTime) || '16:30';
+                const wakeTime = (data.schedule && data.schedule.onTime) || '16:30';
 
-                if (data.sleeping) {
-                    const wakeTime = (data.schedule && data.schedule.onTime) || '16:30';
-                    liveDot.className = 'pulse-dot idle';
-                    liveUserText.textContent = `🌙 Le sapin se repose pour la nuit — Réouverture à ${wakeTime} !`;
-                    liveTimerText.textContent = '';
-                    liveBottomRow.classList.add('hidden');
-                    if (submitBtn) {
+                if (submitBtn) {
+                    if (data.controlClosed) {
                         submitBtn.disabled = true;
                         submitBtn.style.opacity = '0.55';
-                        submitBtn.textContent = `🌙 Sapin en veille jusqu'à ${wakeTime}`;
-                    }
-                } else if (data.current) {
-                    if (submitBtn) {
+                        submitBtn.textContent = `🌙 Contrôle fermé jusqu'à ${openTime}`;
+                    } else {
                         submitBtn.disabled = false;
                         submitBtn.style.opacity = '1';
                         submitBtn.textContent = '🚀 Illuminer le Sapin (2 min)';
                     }
+                }
+
+                if (data.current) {
                     const timeLeft = Math.max(0, Math.ceil(data.current.timeRemaining / 1000));
                     const minutes = Math.floor(timeLeft / 60);
                     const seconds = timeLeft % 60;
@@ -1867,16 +1865,24 @@
                     liveChoiceText.textContent = choiceText;
                     liveProgressFill.style.width = `${pct}%`;
                     liveBottomRow.classList.remove('hidden');
-                } else {
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.style.opacity = '1';
-                        submitBtn.textContent = '🚀 Illuminer le Sapin (2 min)';
-                    }
+                } else if (data.sleeping) {
                     liveDot.className = 'pulse-dot idle';
-                    liveUserText.textContent = data.idleEffect && data.idleEffect.movieName
-                        ? `Sapin libre (En boucle : ${data.idleEffect.movieName}) — Votre tour démarre immédiatement !`
-                        : 'Sapin libre — Votre tour démarre immédiatement !';
+                    liveUserText.textContent = data.controlClosed
+                        ? `🌙 Le sapin se repose — Playlist à ${wakeTime}, contrôle à ${openTime}`
+                        : `🌙 Playlist en pause jusqu'à ${wakeTime} — Vous pouvez quand même illuminer le sapin !`;
+                    liveTimerText.textContent = '';
+                    liveBottomRow.classList.add('hidden');
+                } else {
+                    liveDot.className = 'pulse-dot idle';
+                    if (data.controlClosed) {
+                        liveUserText.textContent = data.idleEffect && data.idleEffect.movieName
+                            ? `En boucle : ${data.idleEffect.movieName} — Contrôle public fermé jusqu'à ${openTime}`
+                            : `🌙 Contrôle public fermé — Réouverture à ${openTime}`;
+                    } else {
+                        liveUserText.textContent = data.idleEffect && data.idleEffect.movieName
+                            ? `Sapin libre (En boucle : ${data.idleEffect.movieName}) — Votre tour démarre immédiatement !`
+                            : 'Sapin libre — Votre tour démarre immédiatement !';
+                    }
                     liveTimerText.textContent = '';
                     liveBottomRow.classList.add('hidden');
                 }

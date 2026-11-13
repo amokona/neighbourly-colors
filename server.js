@@ -102,6 +102,12 @@ const DEFAULT_SCHEDULE = {
   onTime: '16:30',
   offTime: '23:00'
 };
+
+const DEFAULT_CONTROL_SCHEDULE = {
+  enabled: false,
+  startTime: '16:30',
+  endTime: '22:00'
+};
 const SCHEDULE_TIMEZONE = process.env.TZ || 'America/Toronto';
 const TIME_HHMM_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -131,8 +137,8 @@ function parseMinutes(hhmm) {
 function isWithinActiveHours(schedule) {
   if (!schedule || !schedule.enabled) return true;
   const nowMin = parseMinutes(getCurrentTimeHHMM());
-  const onMin = parseMinutes(schedule.onTime || '16:30');
-  const offMin = parseMinutes(schedule.offTime || '23:00');
+  const onMin = parseMinutes(schedule.onTime || schedule.startTime || '16:30');
+  const offMin = parseMinutes(schedule.offTime || schedule.endTime || '23:00');
   if (onMin === offMin) return true;
   if (onMin < offMin) {
     // Same-day window (e.g. 16:30 -> 23:00)
@@ -154,6 +160,7 @@ let usageData = {
   logs: [],
   idlePlaylist: { ...DEFAULT_IDLE_PLAYLIST },
   schedule: { ...DEFAULT_SCHEDULE },
+  controlSchedule: { ...DEFAULT_CONTROL_SCHEDULE },
   geminiApiKey: '',
   aiCreations: []
 };
@@ -525,6 +532,7 @@ function loadUsageData() {
       const parsed = JSON.parse(raw);
       const savedPlaylist = parsed.idlePlaylist || {};
       const savedSchedule = parsed.schedule || {};
+      const savedControlSchedule = parsed.controlSchedule || {};
       usageData = {
         ...usageData,
         ...parsed,
@@ -545,6 +553,11 @@ function loadUsageData() {
           enabled: typeof savedSchedule.enabled === 'boolean' ? savedSchedule.enabled : DEFAULT_SCHEDULE.enabled,
           onTime: TIME_HHMM_REGEX.test(savedSchedule.onTime || '') ? savedSchedule.onTime : DEFAULT_SCHEDULE.onTime,
           offTime: TIME_HHMM_REGEX.test(savedSchedule.offTime || '') ? savedSchedule.offTime : DEFAULT_SCHEDULE.offTime
+        },
+        controlSchedule: {
+          enabled: typeof savedControlSchedule.enabled === 'boolean' ? savedControlSchedule.enabled : DEFAULT_CONTROL_SCHEDULE.enabled,
+          startTime: TIME_HHMM_REGEX.test(savedControlSchedule.startTime || '') ? savedControlSchedule.startTime : DEFAULT_CONTROL_SCHEDULE.startTime,
+          endTime: TIME_HHMM_REGEX.test(savedControlSchedule.endTime || '') ? savedControlSchedule.endTime : DEFAULT_CONTROL_SCHEDULE.endTime
         },
         geminiApiKey: typeof parsed.geminiApiKey === 'string' ? parsed.geminiApiKey : '',
         aiCreations: Array.isArray(parsed.aiCreations) ? parsed.aiCreations : []
@@ -812,39 +825,36 @@ async function evaluateScheduleState(forceApply = false) {
 
   if (shouldSleep && (!isSleepingForNight || forceApply)) {
     isSleepingForNight = true;
-    if (currentTimeout) {
-      clearTimeout(currentTimeout);
-      currentTimeout = null;
-    }
-    currentUser = null;
-    queue = [];
     stopIdlePlaylist();
-    effectRunner.stop();
 
-    try {
-      await forAllControllers(async (client) => {
-        await client.setLEDOperationMode({ mode: 'off' });
-      });
-      console.log(`🌙 Night schedule active: tree turned off until ${schedule.onTime}`);
-      addLogEntry({
-        event: 'schedule_off',
-        nickname: 'Système',
-        status: 'info',
-        details: `Extinction nocturne automatique (réouverture à ${schedule.onTime})`
-      });
-    } catch (err) {
-      console.error('Error turning off tree for night schedule:', err.message);
+    // Only turn off the tree if no visitor is actively controlling it
+    if (!currentUser && queue.length === 0) {
+      effectRunner.stop();
+      try {
+        await forAllControllers(async (client) => {
+          await client.setLEDOperationMode({ mode: 'off' });
+        });
+        console.log(`🌙 Playlist schedule sleeping: tree turned off until ${schedule.onTime}`);
+        addLogEntry({
+          event: 'schedule_off',
+          nickname: 'Système',
+          status: 'info',
+          details: `Extinction automatique de la playlist (réouverture à ${schedule.onTime})`
+        });
+      } catch (err) {
+        console.error('Error turning off tree for playlist schedule:', err.message);
+      }
     }
   } else if (!shouldSleep && (isSleepingForNight || forceApply)) {
     const wasSleeping = isSleepingForNight;
     isSleepingForNight = false;
     if (wasSleeping) {
-      console.log(`☀️ Active hours started (${schedule.onTime}): waking up tree`);
+      console.log(`☀️ Playlist active hours started (${schedule.onTime}): waking up tree`);
       addLogEntry({
         event: 'schedule_on',
         nickname: 'Système',
         status: 'info',
-        details: `Allumage automatique programmé (${schedule.onTime})`
+        details: `Allumage automatique programmé de la playlist (${schedule.onTime})`
       });
     }
     if (!currentUser && queue.length === 0) {
@@ -862,7 +872,18 @@ async function processNextInQueue() {
 
   if (queue.length === 0) {
     currentUser = null;
-    await startIdlePlaylist();
+    if (isSleepingForNight) {
+      effectRunner.stop();
+      try {
+        await forAllControllers(async (client) => {
+          await client.setLEDOperationMode({ mode: 'off' });
+        });
+      } catch (err) {
+        console.error('Error turning off tree after queue finished during sleep:', err.message);
+      }
+    } else {
+      await startIdlePlaylist();
+    }
     return;
   }
 
@@ -1351,6 +1372,8 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
 
     const playlist = usageData.idlePlaylist || DEFAULT_IDLE_PLAYLIST;
     const schedule = usageData.schedule || DEFAULT_SCHEDULE;
+    const controlSchedule = usageData.controlSchedule || DEFAULT_CONTROL_SCHEDULE;
+    const controlClosed = Boolean(controlSchedule.enabled) && !isWithinActiveHours(controlSchedule);
 
     res.json({
       summary: {
@@ -1376,6 +1399,14 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
         onTime: schedule.onTime || '16:30',
         offTime: schedule.offTime || '23:00',
         sleeping: isSleepingForNight,
+        serverTime: getCurrentTimeHHMM(),
+        timezone: SCHEDULE_TIMEZONE
+      },
+      controlSchedule: {
+        enabled: Boolean(controlSchedule.enabled),
+        startTime: controlSchedule.startTime || '16:30',
+        endTime: controlSchedule.endTime || '22:00',
+        closed: controlClosed,
         serverTime: getCurrentTimeHHMM(),
         timezone: SCHEDULE_TIMEZONE
       },
@@ -1445,6 +1476,54 @@ app.post('/api/admin/schedule', requireAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error saving schedule:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Configure Public Light Control Schedule (admin only)
+app.post('/api/admin/control-schedule', requireAdmin, async (req, res) => {
+  try {
+    const { enabled, startTime, endTime } = req.body || {};
+
+    const cleanEnabled = typeof enabled === 'boolean'
+      ? enabled
+      : Boolean(usageData.controlSchedule?.enabled);
+
+    const cleanStartTime = TIME_HHMM_REGEX.test(String(startTime || ''))
+      ? String(startTime)
+      : (usageData.controlSchedule?.startTime || '16:30');
+
+    const cleanEndTime = TIME_HHMM_REGEX.test(String(endTime || ''))
+      ? String(endTime)
+      : (usageData.controlSchedule?.endTime || '22:00');
+
+    usageData.controlSchedule = {
+      enabled: cleanEnabled,
+      startTime: cleanStartTime,
+      endTime: cleanEndTime
+    };
+    saveUsageData();
+
+    addLogEntry({
+      event: 'admin_action',
+      nickname: ADMIN_USER,
+      ip: req.ip || req.socket?.remoteAddress,
+      status: 'info',
+      details: `Horaire contrôle public mis à jour (${cleanEnabled ? `Activé : ${cleanStartTime} → ${cleanEndTime}` : 'Toujours ouvert'})`
+    });
+
+    const controlClosed = Boolean(usageData.controlSchedule.enabled) && !isWithinActiveHours(usageData.controlSchedule);
+
+    res.json({
+      success: true,
+      controlSchedule: {
+        ...usageData.controlSchedule,
+        closed: controlClosed,
+        serverTime: getCurrentTimeHHMM()
+      }
+    });
+  } catch (error) {
+    console.error('Error saving control schedule:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1635,10 +1714,11 @@ app.post('/api/admin/logs/clear', requireAdmin, (req, res) => {
 // Queue endpoints
 app.post('/api/queue/join', async (req, res) => {
   try {
-    if (isSleepingForNight) {
-      const onTime = usageData.schedule?.onTime || '16:30';
+    const controlSchedule = usageData.controlSchedule || DEFAULT_CONTROL_SCHEDULE;
+    if (controlSchedule.enabled && !isWithinActiveHours(controlSchedule)) {
+      const startTime = controlSchedule.startTime || '16:30';
       return res.status(403).json({
-        error: `🌙 Le sapin se repose pour la nuit ! Il se rallumera automatiquement à ${onTime}.`
+        error: `🌙 Le contrôle des lumières est fermé ! Il ouvrira à ${startTime}.`
       });
     }
 
@@ -1751,14 +1831,22 @@ app.get('/api/queue/status', (req, res) => {
     }
 
     const schedule = usageData.schedule || DEFAULT_SCHEDULE;
+    const controlSchedule = usageData.controlSchedule || DEFAULT_CONTROL_SCHEDULE;
+    const controlClosed = Boolean(controlSchedule.enabled) && !isWithinActiveHours(controlSchedule);
 
     res.json({
       paused: queuePaused,
       sleeping: isSleepingForNight,
+      controlClosed,
       schedule: {
         enabled: Boolean(schedule.enabled),
         onTime: schedule.onTime || '16:30',
         offTime: schedule.offTime || '23:00'
+      },
+      controlSchedule: {
+        enabled: Boolean(controlSchedule.enabled),
+        startTime: controlSchedule.startTime || '16:30',
+        endTime: controlSchedule.endTime || '22:00'
       },
       current,
       idleEffect: (!current && !isSleepingForNight && currentIdleEffectId !== null)
